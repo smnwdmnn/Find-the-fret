@@ -68,20 +68,13 @@ body.quiz-active { overscroll-behavior:none; }
   <div class="muted">Find the fret • timed automatically • E A D G B e</div>
 
   <section class="card" id="setup">
-    <div class="row">
-      <label>Questions
-        <select id="roundLength">
-          <option>5</option><option selected>10</option><option>20</option><option>50</option>
-        </select>
-      </label>
-      <button id="startBtn">Start round</button>
-    </div>
+    <button id="startBtn" style="width:100%">Start round</button>
   </section>
 
   <section class="card hidden" id="quiz">
     <div class="row" style="margin-bottom:8px">
       <div>
-        <div class="muted" id="progress">Question 1 / 10</div>
+        <div class="muted" id="progress">Question 1</div>
         <div class="big" id="target">C#</div>
       </div>
       <div class="timer" id="timer">0.00 s</div>
@@ -164,7 +157,6 @@ body.quiz-active { overscroll-behavior:none; }
   const setup = document.getElementById("setup");
   const quiz = document.getElementById("quiz");
   const resultsCard = document.getElementById("resultsCard");
-  const roundLength = document.getElementById("roundLength");
   const startBtn = document.getElementById("startBtn");
   const restartInline = document.getElementById("restartInline");
   const stopInline = document.getElementById("stopInline");
@@ -182,7 +174,8 @@ body.quiz-active { overscroll-behavior:none; }
   const againBtn = document.getElementById("againBtn");
   const exportBox = document.getElementById("exportBox");
 
-  let total = 10, idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null;
+  const MAX_QUESTIONS = 1000;
+  let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null;
 
   function pitch(open, fret) { return (open + fret) % 12; }
 
@@ -210,9 +203,9 @@ body.quiz-active { overscroll-behavior:none; }
 
 
   function showQuestion() {
-    if (idx >= total) return finishRound(false);
+    if (idx >= MAX_QUESTIONS) return finishRound(false);
     current = randomQuestion();
-    progress.textContent = `Question ${idx+1} / ${total}`;
+    progress.textContent = `Question ${idx+1}`;
     target.textContent = current.note;
     tab.textContent = renderTab(current);
     status.textContent = "";
@@ -224,7 +217,7 @@ body.quiz-active { overscroll-behavior:none; }
 
 
   function submitFret(n) {
-    if (!current || idx >= total) return;
+    if (!current || idx >= MAX_QUESTIONS) return;
 
     // Lock buttons immediately to prevent accidental double taps.
     fretButtons.forEach(b => b.disabled = true);
@@ -281,7 +274,8 @@ body.quiz-active { overscroll-behavior:none; }
     const fastest = Math.min(...results.map(r=>r.seconds));
 
     score.textContent = `${correctCount}/${results.length}`;
-    summary.textContent = `${stoppedEarly ? "stopped early • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
+    const capReached = results.length >= MAX_QUESTIONS;
+    summary.textContent = `${stoppedEarly ? "stopped early • " : capReached ? "limit reached • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
 
     resultsBody.innerHTML = results.map(r =>
       `<tr><td>${r.q}</td><td>${r.string}</td><td>${r.note}</td><td>${r.answer}</td><td>${r.correct}</td><td>${r.seconds.toFixed(2)} s ${r.ok ? "✓" : "✕"}</td></tr>`
@@ -301,7 +295,6 @@ body.quiz-active { overscroll-behavior:none; }
   }
 
   function beginRound() {
-    total = Number(roundLength.value);
     idx = 0; results = []; last = null;
     setup.classList.add("hidden");
     resultsCard.classList.add("hidden");
