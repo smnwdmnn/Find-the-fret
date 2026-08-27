@@ -154,7 +154,12 @@ body.quiz-active { overscroll-behavior:none; }
     {name:"B", open:11},
     {name:"e", open:4}
   ];
-  const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const noteNames = [["C","B#"],["C#","Db"],"D",["D#","Eb"],["E","Fb"],["F","E#"],["F#","Gb"],"G",["G#","Ab"],"A",["A#","Bb"],["B","Cb"]];
+
+  function displayNote(pc) {
+    const name = noteNames[pc];
+    return Array.isArray(name) ? name[Math.floor(Math.random() * name.length)] : name;
+  }
 
   const setup = document.getElementById("setup");
   const quiz = document.getElementById("quiz");
@@ -186,7 +191,7 @@ body.quiz-active { overscroll-behavior:none; }
     do {
       const s = Math.floor(Math.random()*strings.length);
       const fret = Math.floor(Math.random()*12); // 0–11
-      q = {s, fret, note: noteNames[pitch(strings[s].open, fret)]};
+      q = {s, fret, note: displayNote(pitch(strings[s].open, fret))};
     } while (last && q.s === last.s && q.note === last.note);
     last = q;
     return q;
