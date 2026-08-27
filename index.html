@@ -23,7 +23,7 @@
 body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); overflow-x:hidden; }
 body.quiz-active { overscroll-behavior:none; }
 
-    main { max-width:720px; margin:0 auto; padding:12px 12px calc(20px + env(safe-area-inset-bottom)); }
+    main { max-width:720px; margin:0 auto; padding:calc(12px + env(safe-area-inset-top)) 12px calc(20px + env(safe-area-inset-bottom)); }
     h1 { font-size:22px; margin:4px 0 2px; }
     .muted { color:var(--muted); font-size:13px; }
     .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px; margin-top:10px; }
@@ -35,13 +35,15 @@ body.quiz-active { overscroll-behavior:none; }
     pre { margin:0; font-size:18px; line-height:1.45; overflow:auto; }
     select, input, button, textarea { font:inherit; }
     select, input { min-height:44px; border:1px solid var(--line); background:transparent; color:var(--text); border-radius:12px; padding:0 10px; }
-    input { width:74px; font-size:22px; text-align:center; }
     button { min-height:44px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; border:1px solid var(--line); border-radius:12px; padding:0 12px; background:var(--accent); color:var(--bg); font-weight:650; }
     button.secondary { background:transparent; color:var(--text); }
     button:disabled { opacity:.5; }
-    .quiz-layout { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:start; }
-    .answer-panel { display:grid; gap:8px; min-width:96px; }
-    .answer-panel button, .answer-panel input { width:100%; }
+    .quiz-layout { display:grid; grid-template-columns:minmax(0,0.92fr) minmax(168px,1.08fr); gap:12px; align-items:start; }
+    .answer-panel { display:grid; gap:8px; min-width:0; }
+    .fret-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+    .fret-btn { min-height:50px; padding:0; font-size:20px; font-variant-numeric:tabular-nums; }
+    .round-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+    .round-actions button { min-height:42px; padding:0 8px; font-size:14px; }
     .status { min-height:18px; margin-top:8px; font-size:13px; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
     th, td { padding:7px 5px; border-bottom:1px solid var(--line); text-align:left; }
@@ -50,11 +52,13 @@ body.quiz-active { overscroll-behavior:none; }
     .hidden { display:none; }
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
-      .quiz-layout { grid-template-columns:minmax(0,1fr) 88px; gap:8px; }
+      .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
       pre { font-size:16px; }
       .big { font-size:27px; }
       .timer { font-size:19px; }
       button { padding:0 8px; }
+      .fret-grid { gap:6px; }
+      .fret-btn { min-height:48px; font-size:19px; }
     }
   </style>
 </head>
@@ -86,23 +90,26 @@ body.quiz-active { overscroll-behavior:none; }
     <div class="quiz-layout">
       <pre id="tab"></pre>
 
-      <div id="answerForm" class="answer-panel">
-        <input
-          id="answer"
-          type="text"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          enterkeyhint="done"
-          autocomplete="off"
-          autocorrect="off"
-          spellcheck="false"
-          maxlength="2"
-          placeholder="0–11"
-          aria-label="Fret answer"
-        />
-        <button type="button" id="submitBtn" tabindex="-1">Submit</button>
-        <button type="button" id="restartInline" class="secondary">Restart</button>
-        <button type="button" id="stopInline" class="secondary">Stop round</button>
+      <div class="answer-panel">
+        <div class="fret-grid" id="fretGrid" aria-label="Choose fret">
+          <button type="button" class="fret-btn" data-fret="0">0</button>
+          <button type="button" class="fret-btn" data-fret="1">1</button>
+          <button type="button" class="fret-btn" data-fret="2">2</button>
+          <button type="button" class="fret-btn" data-fret="3">3</button>
+          <button type="button" class="fret-btn" data-fret="4">4</button>
+          <button type="button" class="fret-btn" data-fret="5">5</button>
+          <button type="button" class="fret-btn" data-fret="6">6</button>
+          <button type="button" class="fret-btn" data-fret="7">7</button>
+          <button type="button" class="fret-btn" data-fret="8">8</button>
+          <button type="button" class="fret-btn" data-fret="9">9</button>
+          <button type="button" class="fret-btn" data-fret="10">10</button>
+          <button type="button" class="fret-btn" data-fret="11">11</button>
+        </div>
+
+        <div class="round-actions">
+          <button type="button" id="restartInline" class="secondary">Restart</button>
+          <button type="button" id="stopInline" class="secondary">Stop</button>
+        </div>
       </div>
     </div>
 
@@ -156,14 +163,13 @@ body.quiz-active { overscroll-behavior:none; }
   const startBtn = document.getElementById("startBtn");
   const restartInline = document.getElementById("restartInline");
   const stopInline = document.getElementById("stopInline");
-  const submitBtn = document.getElementById("submitBtn");
   const progress = document.getElementById("progress");
   const target = document.getElementById("target");
   const tab = document.getElementById("tab");
   const timer = document.getElementById("timer");
-  const answer = document.getElementById("answer");
-  const answerForm = document.getElementById("answerForm");
   const status = document.getElementById("status");
+  const fretGrid = document.getElementById("fretGrid");
+  const fretButtons = [...document.querySelectorAll(".fret-btn")];
   const resultsBody = document.getElementById("resultsBody");
   const score = document.getElementById("score");
   const summary = document.getElementById("summary");
@@ -197,11 +203,6 @@ body.quiz-active { overscroll-behavior:none; }
     raf = requestAnimationFrame(tick);
   }
 
-  function focusAnswer() {
-    try { answer.focus({preventScroll:true}); } catch { answer.focus(); }
-    const len = answer.value.length;
-    try { answer.setSelectionRange(len, len); } catch {}
-  }
 
   function showQuestion() {
     if (idx >= total) return finishRound(false);
@@ -209,32 +210,25 @@ body.quiz-active { overscroll-behavior:none; }
     progress.textContent = `Question ${idx+1} / ${total}`;
     target.textContent = current.note;
     tab.textContent = renderTab(current);
-    answer.value = "";
     status.textContent = "";
-    answer.disabled = false;
+    fretButtons.forEach(b => b.disabled = false);
     startedAt = performance.now();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(tick);
-    if (document.activeElement !== answer) {
-      focusAnswer();
-    }
   }
 
 
-  function submitAnswer() {
-    const raw = answer.value.trim();
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n < 0 || n > 11) {
-      status.textContent = "Enter a fret from 0 to 11.";
-      focusAnswer();
-      return;
-    }
+  function submitFret(n) {
+    if (!current || idx >= total) return;
+
+    // Lock buttons immediately to prevent accidental double taps.
+    fretButtons.forEach(b => b.disabled = true);
 
     const ms = performance.now() - startedAt;
     cancelAnimationFrame(raf);
     timer.textContent = (ms/1000).toFixed(2) + " s";
-    const ok = n === current.fret;
 
+    const ok = n === current.fret;
     results.push({
       q: idx+1,
       string: strings[current.s].name,
@@ -248,56 +242,14 @@ body.quiz-active { overscroll-behavior:none; }
     status.textContent = ok ? "Correct." : `Correct fret: ${current.fret}`;
     idx++;
 
-    // Important for iOS:
-    // NEVER blur, disable, replace, or hide the input between questions.
-    // Keep the same DOM input focused while only changing its value/content.
-    answer.value = "";
-    focusAnswer();
-
-    setTimeout(() => {
-      showQuestion();
-      focusAnswer();
-    }, 220);
+    setTimeout(showQuestion, 220);
   }
 
-  answer.addEventListener("input", () => {
-    answer.value = answer.value.replace(/\D/g, "").slice(0,2);
-  });
-
-  // Keep the input focused even when Submit is tapped.
-  // Prevent the button from becoming the active element.
-  submitBtn.addEventListener("pointerdown", e => {
+  fretGrid.addEventListener("pointerdown", e => {
+    const btn = e.target.closest(".fret-btn");
+    if (!btn || btn.disabled) return;
     e.preventDefault();
-    submitAnswer();
-  });
-
-  submitBtn.addEventListener("touchstart", e => {
-    e.preventDefault();
-  }, {passive:false});
-
-  submitBtn.addEventListener("click", e => {
-    e.preventDefault();
-    focusAnswer();
-  });
-
-  // If a hardware keyboard is connected, Enter submits without leaving the input.
-  answer.addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      submitAnswer();
-    }
-  });
-
-  // Defensive: if iOS tries to move focus away while a round is active,
-  // immediately restore focus to the same input.
-  document.addEventListener("focusin", e => {
-    if (
-      document.body.classList.contains("quiz-active") &&
-      e.target !== answer &&
-      e.target !== restartInline
-    ) {
-      requestAnimationFrame(focusAnswer);
-    }
+    submitFret(Number(btn.dataset.fret));
   });
 
   function finishRound(stoppedEarly = false) {
@@ -305,7 +257,6 @@ body.quiz-active { overscroll-behavior:none; }
     quiz.classList.add("hidden");
     resultsCard.classList.remove("hidden");
     document.body.classList.remove("quiz-active");
-    answer.blur();
 
     const correctCount = results.filter(r=>r.ok).length;
 
@@ -351,9 +302,6 @@ body.quiz-active { overscroll-behavior:none; }
     resultsCard.classList.add("hidden");
     quiz.classList.remove("hidden");
     document.body.classList.add("quiz-active");
-    // iOS is most reliable when focus is triggered directly by the Start tap.
-    answer.value = "";
-    focusAnswer();
     showQuestion();
   }
 
@@ -361,16 +309,14 @@ body.quiz-active { overscroll-behavior:none; }
     cancelAnimationFrame(raf);
     idx = 0; results = []; last = null;
     status.textContent = "";
-    answer.value = "";
-    focusAnswer();
     showQuestion();
   }
+
 
   startBtn.addEventListener("click", beginRound);
   restartInline.addEventListener("pointerdown", e => {
     e.preventDefault();
     restartRound();
-    focusAnswer();
   });
   restartInline.addEventListener("click", e => e.preventDefault());
 
@@ -398,13 +344,6 @@ body.quiz-active { overscroll-behavior:none; }
   });
 
 
-  // iOS can scroll the page when the keyboard opens. Since the quiz is already
-  // positioned at the top, gently restore the page to the top while answering.
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", () => {
-      if (document.body.classList.contains("quiz-active")) {
-        requestAnimationFrame(() => window.scrollTo({top:0, left:0, behavior:"auto"}));
-      }
     });
   }
 
