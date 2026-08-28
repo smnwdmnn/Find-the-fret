@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Fret Speed" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=11" />
+  <link rel="apple-touch-icon" href="icon.svg?v=12" />
   <title>Fretboard Speedround</title>
   <style>
     :root {
@@ -68,7 +68,11 @@ body.quiz-active { overscroll-behavior:none; }
   <div class="muted">Find the fret • timed automatically • E A D G B e</div>
 
   <section class="card" id="setup">
-    <button id="startBtn" style="width:100%">Start round</button>
+    <div style="display:grid;gap:10px">
+      <button id="startNaturalBtn" style="width:100%">Start naturals only</button>
+      <button id="startAllBtn" class="secondary" style="width:100%">Start all notes</button>
+    </div>
+    <div class="muted" style="margin-top:10px">Naturals only: C D E F G A B · All notes: naturals + enharmonic spellings</div>
   </section>
 
   <section class="card hidden" id="quiz">
@@ -157,7 +161,8 @@ body.quiz-active { overscroll-behavior:none; }
   const setup = document.getElementById("setup");
   const quiz = document.getElementById("quiz");
   const resultsCard = document.getElementById("resultsCard");
-  const startBtn = document.getElementById("startBtn");
+  const startNaturalBtn = document.getElementById("startNaturalBtn");
+  const startAllBtn = document.getElementById("startAllBtn");
   const restartInline = document.getElementById("restartInline");
   const stopInline = document.getElementById("stopInline");
   const progress = document.getElementById("progress");
@@ -175,7 +180,7 @@ body.quiz-active { overscroll-behavior:none; }
   const exportBox = document.getElementById("exportBox");
 
   const MAX_QUESTIONS = 1000;
-  let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null;
+  let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null, mode = "all";
 
   function pitch(open, fret) { return (open + fret) % 12; }
 
@@ -183,10 +188,22 @@ body.quiz-active { overscroll-behavior:none; }
     let q;
     do {
       const s = Math.floor(Math.random()*strings.length);
-      const fret = Math.floor(Math.random()*12); // 0–11
-      q = {s, fret, note: displayNote(pitch(strings[s].open, fret))};
-    } while (last && q.s === last.s && q.note === last.note);
-    last = q;
+      let fret, note;
+      if (mode === "naturals") {
+        const naturals = [
+          {name:"C",pc:0},{name:"D",pc:2},{name:"E",pc:4},{name:"F",pc:5},
+          {name:"G",pc:7},{name:"A",pc:9},{name:"B",pc:11}
+        ];
+        const chosen = naturals[Math.floor(Math.random()*naturals.length)];
+        note = chosen.name;
+        fret = (chosen.pc - strings[s].open + 12) % 12;
+      } else {
+        fret = Math.floor(Math.random()*12);
+        note = displayNote(pitch(strings[s].open,fret));
+      }
+      q={s,fret,note};
+    } while(last && q.s===last.s && q.note===last.note);
+    last=q;
     return q;
   }
 
@@ -205,7 +222,7 @@ body.quiz-active { overscroll-behavior:none; }
   function showQuestion() {
     if (idx >= MAX_QUESTIONS) return finishRound(false);
     current = randomQuestion();
-    progress.textContent = `Question ${idx+1}`;
+    progress.textContent = `${mode === "naturals" ? "Naturals" : "All notes"} · Question ${idx+1}`;
     target.textContent = current.note;
     tab.textContent = renderTab(current);
     status.textContent = "";
@@ -264,6 +281,7 @@ body.quiz-active { overscroll-behavior:none; }
       resultsBody.innerHTML = "";
       exportBox.value = [
         "Fretboard speedround results",
+        `Mode: ${mode === "naturals" ? "Naturals only" : "All notes"}`,
         "Score: 0/0",
         "No completed answers."
       ].join("\n");
@@ -283,6 +301,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     const lines = [
       "Fretboard speedround results",
+      `Mode: ${mode === "naturals" ? "Naturals only" : "All notes"}`,
       `Score: ${correctCount}/${results.length}`,
       `Average: ${avg.toFixed(2)} s`,
       ...(stoppedEarly ? ["Stopped early: yes"] : []),
@@ -294,7 +313,8 @@ body.quiz-active { overscroll-behavior:none; }
     exportBox.value = lines.join("\n");
   }
 
-  function beginRound() {
+  function beginRound(selectedMode) {
+    mode = selectedMode;
     idx = 0; results = []; last = null;
     setup.classList.add("hidden");
     resultsCard.classList.add("hidden");
@@ -311,7 +331,8 @@ body.quiz-active { overscroll-behavior:none; }
   }
 
 
-  startBtn.addEventListener("click", beginRound);
+  startNaturalBtn.addEventListener("click", () => beginRound("naturals"));
+  startAllBtn.addEventListener("click", () => beginRound("all"));
   restartInline.addEventListener("pointerdown", e => {
     e.preventDefault();
     restartRound();
