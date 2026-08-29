@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#111111" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Fret Speed" />
+  <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=12" />
-  <title>Fretboard Speedround</title>
+  <link rel="apple-touch-icon" href="icon.svg?v=13" />
+  <title>Find the Fret!</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -64,7 +64,7 @@ body.quiz-active { overscroll-behavior:none; }
 </head>
 <body>
 <main>
-  <h1>Fretboard Speedround</h1>
+  <h1>Find the Fret!</h1>
   <div class="muted">Find the fret • timed automatically • E A D G B e</div>
 
   <section class="card" id="setup">
@@ -151,6 +151,9 @@ body.quiz-active { overscroll-behavior:none; }
     {name:"B", open:11},
     {name:"e", open:4}
   ];
+  // Five equally likely string families. E/e share one family because they have
+  // identical note/fret mappings; choosing that family then picks E or e 50/50.
+  const stringFamilies = [[0,5],[1],[2],[3],[4]];
   const noteNames = [["C","B#"],["C#","Db"],"D",["D#","Eb"],["E","Fb"],["F","E#"],["F#","Gb"],"G",["G#","Ab"],"A",["A#","Bb"],["B","Cb"]];
 
   function displayNote(pc) {
@@ -184,10 +187,19 @@ body.quiz-active { overscroll-behavior:none; }
 
   function pitch(open, fret) { return (open + fret) % 12; }
 
+  function chooseString() {
+    const family = stringFamilies[Math.floor(Math.random() * stringFamilies.length)];
+    return family[Math.floor(Math.random() * family.length)];
+  }
+
+  function stringFamily(s) {
+    return (s === 0 || s === 5) ? "E/e" : strings[s].name;
+  }
+
   function randomQuestion() {
     let q;
     do {
-      const s = Math.floor(Math.random()*strings.length);
+      const s = chooseString();
       let fret, note;
       if (mode === "naturals") {
         const naturals = [
@@ -202,7 +214,7 @@ body.quiz-active { overscroll-behavior:none; }
         note = displayNote(pitch(strings[s].open,fret));
       }
       q={s,fret,note};
-    } while(last && q.s===last.s && q.note===last.note);
+    } while(last && stringFamily(q.s)===stringFamily(last.s) && q.note===last.note);
     last=q;
     return q;
   }
@@ -220,7 +232,7 @@ body.quiz-active { overscroll-behavior:none; }
 
 
   function showQuestion() {
-    if (idx >= MAX_QUESTIONS) return finishRound(false);
+    if (idx >= MAX_QUESTIONS) return finishRound();
     current = randomQuestion();
     progress.textContent = `${mode === "naturals" ? "Naturals" : "All notes"} · Question ${idx+1}`;
     target.textContent = current.note;
@@ -267,7 +279,7 @@ body.quiz-active { overscroll-behavior:none; }
     submitFret(Number(btn.dataset.fret));
   });
 
-  function finishRound(stoppedEarly = false) {
+  function finishRound() {
     cancelAnimationFrame(raf);
     quiz.classList.add("hidden");
     resultsCard.classList.remove("hidden");
@@ -277,10 +289,10 @@ body.quiz-active { overscroll-behavior:none; }
 
     if (results.length === 0) {
       score.textContent = "0/0";
-      summary.textContent = stoppedEarly ? "stopped before first answer" : "no completed answers";
+      summary.textContent = "no completed answers";
       resultsBody.innerHTML = "";
       exportBox.value = [
-        "Fretboard speedround results",
+        "Find the Fret! results",
         `Mode: ${mode === "naturals" ? "Naturals only" : "All notes"}`,
         "Score: 0/0",
         "No completed answers."
@@ -293,18 +305,17 @@ body.quiz-active { overscroll-behavior:none; }
 
     score.textContent = `${correctCount}/${results.length}`;
     const capReached = results.length >= MAX_QUESTIONS;
-    summary.textContent = `${stoppedEarly ? "stopped early • " : capReached ? "limit reached • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
+    summary.textContent = `${capReached ? "limit reached • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
 
     resultsBody.innerHTML = results.map(r =>
       `<tr><td>${r.q}</td><td>${r.string}</td><td>${r.note}</td><td>${r.answer}</td><td>${r.correct}</td><td>${r.seconds.toFixed(2)} s ${r.ok ? "✓" : "✕"}</td></tr>`
     ).join("");
 
     const lines = [
-      "Fretboard speedround results",
+      "Find the Fret! results",
       `Mode: ${mode === "naturals" ? "Naturals only" : "All notes"}`,
       `Score: ${correctCount}/${results.length}`,
       `Average: ${avg.toFixed(2)} s`,
-      ...(stoppedEarly ? ["Stopped early: yes"] : []),
       "",
       "| # | String | Note | Answer | Correct fret | Time (s) | Result |",
       "|---:|:---:|:---:|---:|---:|---:|:---:|",
@@ -341,7 +352,7 @@ body.quiz-active { overscroll-behavior:none; }
 
   stopInline.addEventListener("pointerdown", e => {
     e.preventDefault();
-    finishRound(true);
+    finishRound();
   });
   stopInline.addEventListener("click", e => e.preventDefault());
 
