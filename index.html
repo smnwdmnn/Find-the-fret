@@ -240,6 +240,8 @@ body.quiz-active { overscroll-behavior:none; }
 
   const MAX_QUESTIONS = 1000;
   let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null, mode = "all";
+  let comboStats = new Map();
+  let fretZeroCorrectTimes = [];
   const scaleRoots = [
     ["C"],["C#","Db"],["D"],["D#","Eb"],["E"],["F"],
     ["F#","Gb"],["G"],["G#","Ab"],["A"],["A#","Bb"],["B"]
@@ -249,35 +251,75 @@ body.quiz-active { overscroll-behavior:none; }
 
   function pitch(open, fret) { return (open + fret) % 12; }
 
-  function chooseString() {
-    const family = stringFamilies[Math.floor(Math.random() * stringFamilies.length)];
-    return family[Math.floor(Math.random() * family.length)];
-  }
-
   function stringFamily(s) {
     return (s === 0 || s === 5) ? "E/e" : strings[s].name;
   }
 
+  function comboKey(familyIndex, pc) {
+    return `${familyIndex}|${pc}`;
+  }
+
+  function baselineSeconds() {
+    if (!fretZeroCorrectTimes.length) return null;
+    return fretZeroCorrectTimes.reduce((sum, t) => sum + t, 0) / fretZeroCorrectTimes.length;
+  }
+
+  function reinforcementWeight(key) {
+    const stat = comboStats.get(key);
+    if (!stat) return 1;
+
+    const baseline = baselineSeconds();
+    const avgCorrect = stat.correctCount ? stat.correctTimeTotal / stat.correctCount : null;
+    const speedWeight = baseline && avgCorrect ? Math.max(1, avgCorrect / baseline) : 1;
+    const errorWeight = stat.errorBoost || 1;
+    return Math.min(3, speedWeight * errorWeight);
+  }
+
+  function weightedChoice(items) {
+    const total = items.reduce((sum, item) => sum + item.weight, 0);
+    let r = Math.random() * total;
+    for (const item of items) {
+      r -= item.weight;
+      if (r <= 0) return item;
+    }
+    return items[items.length - 1];
+  }
+
   function randomQuestion() {
-    let q;
-    do {
-      const s = chooseString();
-      let fret, note;
+    const naturals = [
+      {name:"C",pc:0},{name:"D",pc:2},{name:"E",pc:4},{name:"F",pc:5},
+      {name:"G",pc:7},{name:"A",pc:9},{name:"B",pc:11}
+    ];
+    const candidates = [];
+
+    stringFamilies.forEach((family, familyIndex) => {
       if (mode === "naturals") {
-        const naturals = [
-          {name:"C",pc:0},{name:"D",pc:2},{name:"E",pc:4},{name:"F",pc:5},
-          {name:"G",pc:7},{name:"A",pc:9},{name:"B",pc:11}
-        ];
-        const chosen = naturals[Math.floor(Math.random()*naturals.length)];
-        note = chosen.name;
-        fret = (chosen.pc - strings[s].open + 12) % 12;
+        naturals.forEach(chosen => {
+          const fret = (chosen.pc - strings[family[0]].open + 12) % 12;
+          const key = comboKey(familyIndex, chosen.pc);
+          candidates.push({family, familyIndex, pc:chosen.pc, fret, note:chosen.name, key, weight:reinforcementWeight(key)});
+        });
       } else {
-        fret = Math.floor(Math.random()*12);
-        note = displayNote(pitch(strings[s].open,fret));
+        for (let fret = 0; fret < 12; fret++) {
+          const pc = pitch(strings[family[0]].open, fret);
+          const key = comboKey(familyIndex, pc);
+          candidates.push({family, familyIndex, pc, fret, key, weight:reinforcementWeight(key)});
+        }
       }
-      q={s,fret,note};
-    } while(last && stringFamily(q.s)===stringFamily(last.s) && q.note===last.note);
-    last=q;
+    });
+
+    const eligible = candidates.filter(c => !(last && c.familyIndex === last.familyIndex && c.pc === last.pc));
+    const chosen = weightedChoice(eligible.length ? eligible : candidates);
+    const s = chosen.family[Math.floor(Math.random() * chosen.family.length)];
+    const q = {
+      s,
+      familyIndex: chosen.familyIndex,
+      pc: chosen.pc,
+      fret: chosen.fret,
+      note: mode === "naturals" ? chosen.note : displayNote(chosen.pc),
+      key: chosen.key
+    };
+    last = q;
     return q;
   }
 
@@ -373,6 +415,18 @@ body.quiz-active { overscroll-behavior:none; }
     timer.textContent = (ms/1000).toFixed(2) + " s";
 
     const ok = n === current.fret;
+    const seconds = ms / 1000;
+    const stat = comboStats.get(current.key) || {correctTimeTotal:0, correctCount:0, errorBoost:1};
+    if (ok) {
+      stat.correctTimeTotal += seconds;
+      stat.correctCount += 1;
+      stat.errorBoost = Math.max(1, (stat.errorBoost || 1) - 0.25);
+      if (current.fret === 0) fretZeroCorrectTimes.push(seconds);
+    } else {
+      stat.errorBoost = 1.5;
+    }
+    comboStats.set(current.key, stat);
+
     results.push({
       q: idx+1,
       string: strings[current.s].name,
@@ -380,7 +434,7 @@ body.quiz-active { overscroll-behavior:none; }
       answer: n,
       correct: current.fret,
       ok,
-      seconds: +(ms/1000).toFixed(2)
+      seconds: +seconds.toFixed(2)
     });
 
     status.textContent = ok ? "Correct." : `Correct fret: ${current.fret}`;
@@ -443,7 +497,7 @@ body.quiz-active { overscroll-behavior:none; }
 
   function beginRound(selectedMode) {
     mode = selectedMode;
-    idx = 0; results = []; last = null;
+    idx = 0; results = []; last = null; comboStats = new Map(); fretZeroCorrectTimes = [];
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
     resultsCard.classList.add("hidden");
@@ -454,7 +508,7 @@ body.quiz-active { overscroll-behavior:none; }
 
   function restartRound() {
     cancelAnimationFrame(raf);
-    idx = 0; results = []; last = null;
+    idx = 0; results = []; last = null; comboStats = new Map(); fretZeroCorrectTimes = [];
     status.textContent = "";
     showQuestion();
   }
