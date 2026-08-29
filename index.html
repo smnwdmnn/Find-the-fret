@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=13" />
+  <link rel="apple-touch-icon" href="icon.svg?v=14" />
   <title>Find the Fret!</title>
   <style>
     :root {
@@ -50,6 +50,15 @@ body.quiz-active { overscroll-behavior:none; }
     .scroll { overflow-x:auto; }
     textarea { width:100%; min-height:160px; border:1px solid var(--line); border-radius:12px; padding:10px; background:transparent; color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
     .hidden { display:none; }
+    .section-title { font-size:17px; font-weight:700; margin:0 0 4px; }
+    .mode-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-top:8px; }
+    .check-pill { display:flex; align-items:center; gap:8px; min-height:44px; border:1px solid var(--line); border-radius:12px; padding:8px 10px; font-size:14px; }
+    .check-pill input { min-height:auto; width:18px; height:18px; margin:0; padding:0; }
+    .scale-types { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:8px; }
+    .scale-output { display:flex; align-items:center; justify-content:center; text-align:center; min-height:82px; border:1px solid var(--line); border-radius:14px; margin:10px 0; padding:12px; }
+    .scale-result { font-size:25px; font-weight:750; line-height:1.15; }
+    .small-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
+    .small-actions button { min-height:36px; font-size:13px; }
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
       .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
@@ -73,6 +82,42 @@ body.quiz-active { overscroll-behavior:none; }
       <button id="startAllBtn" class="secondary" style="width:100%">Start all notes</button>
     </div>
     <div class="muted" style="margin-top:10px">Naturals only: C D E F G A B · All notes: naturals + enharmonic spellings</div>
+  </section>
+
+  <section class="card" id="scaleSection">
+    <div class="section-title">Random Scale &amp; Mode</div>
+    <div class="muted">Choose what you want to practise, then draw a random root + mode + scale type.</div>
+
+    <div class="scale-output" aria-live="polite">
+      <div>
+        <div class="muted" id="scalePrompt">Ready</div>
+        <div class="scale-result" id="scaleResult">—</div>
+      </div>
+    </div>
+
+    <div class="muted">Modes</div>
+    <div class="mode-grid" id="modeGrid">
+      <label class="check-pill"><input type="checkbox" value="Ionian" checked>Ionian</label>
+      <label class="check-pill"><input type="checkbox" value="Dorian" checked>Dorian</label>
+      <label class="check-pill"><input type="checkbox" value="Phrygian" checked>Phrygian</label>
+      <label class="check-pill"><input type="checkbox" value="Lydian" checked>Lydian</label>
+      <label class="check-pill"><input type="checkbox" value="Mixolydian" checked>Mixolydian</label>
+      <label class="check-pill"><input type="checkbox" value="Aeolian" checked>Aeolian</label>
+      <label class="check-pill"><input type="checkbox" value="Locrian" checked>Locrian</label>
+    </div>
+    <div class="small-actions">
+      <button type="button" id="allModesBtn" class="secondary">All modes</button>
+      <button type="button" id="noModesBtn" class="secondary">Clear modes</button>
+    </div>
+
+    <div class="muted" style="margin-top:10px">Scale type</div>
+    <div class="scale-types">
+      <label class="check-pill"><input type="checkbox" id="diatonicToggle" checked>Diatonic</label>
+      <label class="check-pill"><input type="checkbox" id="pentatonicToggle" checked>Pentatonic</label>
+    </div>
+
+    <button type="button" id="randomScaleBtn" style="width:100%;margin-top:10px">Random scale</button>
+    <div class="status" id="scaleStatus"></div>
   </section>
 
   <section class="card hidden" id="quiz">
@@ -162,6 +207,7 @@ body.quiz-active { overscroll-behavior:none; }
   }
 
   const setup = document.getElementById("setup");
+  const scaleSection = document.getElementById("scaleSection");
   const quiz = document.getElementById("quiz");
   const resultsCard = document.getElementById("resultsCard");
   const startNaturalBtn = document.getElementById("startNaturalBtn");
@@ -181,9 +227,25 @@ body.quiz-active { overscroll-behavior:none; }
   const copyBtn = document.getElementById("copyBtn");
   const againBtn = document.getElementById("againBtn");
   const exportBox = document.getElementById("exportBox");
+  const modeGrid = document.getElementById("modeGrid");
+  const modeChecks = [...modeGrid.querySelectorAll('input[type="checkbox"]')];
+  const diatonicToggle = document.getElementById("diatonicToggle");
+  const pentatonicToggle = document.getElementById("pentatonicToggle");
+  const randomScaleBtn = document.getElementById("randomScaleBtn");
+  const allModesBtn = document.getElementById("allModesBtn");
+  const noModesBtn = document.getElementById("noModesBtn");
+  const scaleResult = document.getElementById("scaleResult");
+  const scalePrompt = document.getElementById("scalePrompt");
+  const scaleStatus = document.getElementById("scaleStatus");
 
   const MAX_QUESTIONS = 1000;
   let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null, mode = "all";
+  const scaleRoots = [
+    ["C"],["C#","Db"],["D"],["D#","Eb"],["E"],["F"],
+    ["F#","Gb"],["G"],["G#","Ab"],["A"],["A#","Bb"],["B"]
+  ];
+  const SCALE_PREFS_KEY = "findTheFret.scalePrefs.v1";
+  let lastScaleKey = null;
 
   function pitch(open, fret) { return (open + fret) % 12; }
 
@@ -230,6 +292,61 @@ body.quiz-active { overscroll-behavior:none; }
     raf = requestAnimationFrame(tick);
   }
 
+
+  function saveScalePrefs() {
+    try {
+      localStorage.setItem(SCALE_PREFS_KEY, JSON.stringify({
+        modes: modeChecks.filter(c => c.checked).map(c => c.value),
+        diatonic: diatonicToggle.checked,
+        pentatonic: pentatonicToggle.checked
+      }));
+    } catch {}
+  }
+
+  function loadScalePrefs() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SCALE_PREFS_KEY) || "null");
+      if (!saved) return;
+      if (Array.isArray(saved.modes)) {
+        modeChecks.forEach(c => c.checked = saved.modes.includes(c.value));
+      }
+      if (typeof saved.diatonic === "boolean") diatonicToggle.checked = saved.diatonic;
+      if (typeof saved.pentatonic === "boolean") pentatonicToggle.checked = saved.pentatonic;
+    } catch {}
+  }
+
+  function randomScale() {
+    const modes = modeChecks.filter(c => c.checked).map(c => c.value);
+    const types = [];
+    if (diatonicToggle.checked) types.push("diatonic");
+    if (pentatonicToggle.checked) types.push("pentatonic");
+
+    if (!modes.length) {
+      scaleStatus.textContent = "Select at least one mode.";
+      return;
+    }
+    if (!types.length) {
+      scaleStatus.textContent = "Select Diatonic, Pentatonic, or both.";
+      return;
+    }
+
+    const total = scaleRoots.length * modes.length * types.length;
+    let rootPc, selectedMode, selectedType, key;
+    do {
+      rootPc = Math.floor(Math.random() * scaleRoots.length);
+      selectedMode = modes[Math.floor(Math.random() * modes.length)];
+      selectedType = types[Math.floor(Math.random() * types.length)];
+      key = `${rootPc}|${selectedMode}|${selectedType}`;
+    } while (total > 1 && key === lastScaleKey);
+
+    lastScaleKey = key;
+    const spellings = scaleRoots[rootPc];
+    const root = spellings[Math.floor(Math.random() * spellings.length)];
+    scalePrompt.textContent = "Your scale";
+    scaleResult.textContent = `${root} ${selectedMode} ${selectedType}`;
+    scaleStatus.textContent = "";
+    saveScalePrefs();
+  }
 
   function showQuestion() {
     if (idx >= MAX_QUESTIONS) return finishRound();
@@ -328,6 +445,7 @@ body.quiz-active { overscroll-behavior:none; }
     mode = selectedMode;
     idx = 0; results = []; last = null;
     setup.classList.add("hidden");
+    scaleSection.classList.add("hidden");
     resultsCard.classList.add("hidden");
     quiz.classList.remove("hidden");
     document.body.classList.add("quiz-active");
@@ -360,6 +478,7 @@ body.quiz-active { overscroll-behavior:none; }
     document.body.classList.remove("quiz-active");
     resultsCard.classList.add("hidden");
     setup.classList.remove("hidden");
+    scaleSection.classList.remove("hidden");
   });
 
   copyBtn.addEventListener("click", async () => {
@@ -373,6 +492,21 @@ body.quiz-active { overscroll-behavior:none; }
     }
   });
 
+
+  modeChecks.forEach(c => c.addEventListener("change", saveScalePrefs));
+  diatonicToggle.addEventListener("change", saveScalePrefs);
+  pentatonicToggle.addEventListener("change", saveScalePrefs);
+  randomScaleBtn.addEventListener("click", randomScale);
+  allModesBtn.addEventListener("click", () => {
+    modeChecks.forEach(c => c.checked = true);
+    scaleStatus.textContent = "";
+    saveScalePrefs();
+  });
+  noModesBtn.addEventListener("click", () => {
+    modeChecks.forEach(c => c.checked = false);
+    saveScalePrefs();
+  });
+  loadScalePrefs();
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
