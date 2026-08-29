@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=14" />
+  <link rel="apple-touch-icon" href="icon.svg?v=16" />
   <title>Find the Fret!</title>
   <style>
     :root {
@@ -77,11 +77,28 @@ body.quiz-active { overscroll-behavior:none; }
   <div class="muted">Find the fret • timed automatically • E A D G B e</div>
 
   <section class="card" id="setup">
-    <div style="display:grid;gap:10px">
-      <button id="startNaturalBtn" style="width:100%">Start naturals only</button>
-      <button id="startAllBtn" class="secondary" style="width:100%">Start all notes</button>
-    </div>
-    <div class="muted" style="margin-top:10px">Naturals only: C D E F G A B · All notes: naturals + enharmonic spellings</div>
+    <div class="section-title">Round setup</div>
+    <div class="muted">Choose the note set and, if you want, practise one string only.</div>
+
+    <label class="muted" for="noteSetSelect" style="display:block;margin-top:10px">Notes</label>
+    <select id="noteSetSelect" style="width:100%;margin-top:6px">
+      <option value="naturals">Naturals only</option>
+      <option value="all" selected>With accidentals (all notes)</option>
+    </select>
+
+    <label class="muted" for="stringSelect" style="display:block;margin-top:10px">String</label>
+    <select id="stringSelect" style="width:100%;margin-top:6px">
+      <option value="all">All strings</option>
+      <option value="0">E</option>
+      <option value="1">A</option>
+      <option value="2">D</option>
+      <option value="3">G</option>
+      <option value="4">B</option>
+      <option value="5">e</option>
+    </select>
+
+    <button id="startRoundBtn" style="width:100%;margin-top:10px">Start round</button>
+    <div class="status" id="setupStatus"></div>
   </section>
 
   <section class="card" id="scaleSection">
@@ -210,8 +227,10 @@ body.quiz-active { overscroll-behavior:none; }
   const scaleSection = document.getElementById("scaleSection");
   const quiz = document.getElementById("quiz");
   const resultsCard = document.getElementById("resultsCard");
-  const startNaturalBtn = document.getElementById("startNaturalBtn");
-  const startAllBtn = document.getElementById("startAllBtn");
+  const noteSetSelect = document.getElementById("noteSetSelect");
+  const stringSelect = document.getElementById("stringSelect");
+  const startRoundBtn = document.getElementById("startRoundBtn");
+  const setupStatus = document.getElementById("setupStatus");
   const restartInline = document.getElementById("restartInline");
   const stopInline = document.getElementById("stopInline");
   const progress = document.getElementById("progress");
@@ -239,7 +258,8 @@ body.quiz-active { overscroll-behavior:none; }
   const scaleStatus = document.getElementById("scaleStatus");
 
   const MAX_QUESTIONS = 1000;
-  let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null, mode = "all";
+  let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null;
+  let roundOptions = { noteSet:"all", string:"all" };
   let comboStats = new Map();
   let fretZeroCorrectTimes = [];
   const scaleRoots = [
@@ -285,6 +305,13 @@ body.quiz-active { overscroll-behavior:none; }
     return items[items.length - 1];
   }
 
+  function activeFamilies() {
+    if (roundOptions.string === "all") return stringFamilies.map((family, familyIndex) => ({family, familyIndex}));
+    const s = Number(roundOptions.string);
+    const familyIndex = (s === 0 || s === 5) ? 0 : s;
+    return [{family:[s], familyIndex}];
+  }
+
   function randomQuestion() {
     const naturals = [
       {name:"C",pc:0},{name:"D",pc:2},{name:"E",pc:4},{name:"F",pc:5},
@@ -292,16 +319,17 @@ body.quiz-active { overscroll-behavior:none; }
     ];
     const candidates = [];
 
-    stringFamilies.forEach((family, familyIndex) => {
-      if (mode === "naturals") {
+    activeFamilies().forEach(({family, familyIndex}) => {
+      const referenceString = family[0];
+      if (roundOptions.noteSet === "naturals") {
         naturals.forEach(chosen => {
-          const fret = (chosen.pc - strings[family[0]].open + 12) % 12;
+          const fret = (chosen.pc - strings[referenceString].open + 12) % 12;
           const key = comboKey(familyIndex, chosen.pc);
           candidates.push({family, familyIndex, pc:chosen.pc, fret, note:chosen.name, key, weight:reinforcementWeight(key)});
         });
       } else {
         for (let fret = 0; fret < 12; fret++) {
-          const pc = pitch(strings[family[0]].open, fret);
+          const pc = pitch(strings[referenceString].open, fret);
           const key = comboKey(familyIndex, pc);
           candidates.push({family, familyIndex, pc, fret, key, weight:reinforcementWeight(key)});
         }
@@ -316,7 +344,7 @@ body.quiz-active { overscroll-behavior:none; }
       familyIndex: chosen.familyIndex,
       pc: chosen.pc,
       fret: chosen.fret,
-      note: mode === "naturals" ? chosen.note : displayNote(chosen.pc),
+      note: roundOptions.noteSet === "naturals" ? chosen.note : displayNote(chosen.pc),
       key: chosen.key
     };
     last = q;
@@ -393,7 +421,9 @@ body.quiz-active { overscroll-behavior:none; }
   function showQuestion() {
     if (idx >= MAX_QUESTIONS) return finishRound();
     current = randomQuestion();
-    progress.textContent = `${mode === "naturals" ? "Naturals" : "All notes"} · Question ${idx+1}`;
+    const noteLabel = roundOptions.noteSet === "naturals" ? "Naturals" : "With accidentals";
+    const stringLabel = roundOptions.string === "all" ? "All strings" : `${strings[Number(roundOptions.string)].name} string`;
+    progress.textContent = `${noteLabel} · ${stringLabel} · Question ${idx+1}`;
     target.textContent = current.note;
     tab.textContent = renderTab(current);
     status.textContent = "";
@@ -464,7 +494,8 @@ body.quiz-active { overscroll-behavior:none; }
       resultsBody.innerHTML = "";
       exportBox.value = [
         "Find the Fret! results",
-        `Mode: ${mode === "naturals" ? "Naturals only" : "All notes"}`,
+        `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
+        `Strings: ${roundOptions.string === "all" ? "All strings" : strings[Number(roundOptions.string)].name}`,
         "Score: 0/0",
         "No completed answers."
       ].join("\n");
@@ -484,7 +515,8 @@ body.quiz-active { overscroll-behavior:none; }
 
     const lines = [
       "Find the Fret! results",
-      `Mode: ${mode === "naturals" ? "Naturals only" : "All notes"}`,
+      `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
+        `Strings: ${roundOptions.string === "all" ? "All strings" : strings[Number(roundOptions.string)].name}`,
       `Score: ${correctCount}/${results.length}`,
       `Average: ${avg.toFixed(2)} s`,
       "",
@@ -495,8 +527,9 @@ body.quiz-active { overscroll-behavior:none; }
     exportBox.value = lines.join("\n");
   }
 
-  function beginRound(selectedMode) {
-    mode = selectedMode;
+  function beginRound() {
+    roundOptions = { noteSet:noteSetSelect.value, string:stringSelect.value };
+    setupStatus.textContent = "";
     idx = 0; results = []; last = null; comboStats = new Map(); fretZeroCorrectTimes = [];
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
@@ -514,8 +547,8 @@ body.quiz-active { overscroll-behavior:none; }
   }
 
 
-  startNaturalBtn.addEventListener("click", () => beginRound("naturals"));
-  startAllBtn.addEventListener("click", () => beginRound("all"));
+  startRoundBtn.addEventListener("click", beginRound);
+  noteSetSelect.addEventListener("change", () => setupStatus.textContent = "");
   restartInline.addEventListener("pointerdown", e => {
     e.preventDefault();
     restartRound();
