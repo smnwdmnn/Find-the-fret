@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=17" />
+  <link rel="apple-touch-icon" href="icon.svg?v=18" />
   <title>Find the Fret!</title>
   <style>
     :root {
@@ -68,6 +68,9 @@ body.quiz-active { overscroll-behavior:none; }
     .game-menu button.active { background:var(--bg); }
     .note-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
     .note-btn { min-height:50px; padding:0 5px; font-size:16px; line-height:1.1; }
+    .answer-feedback-correct, .answer-feedback-wrong { opacity:1 !important; transition:background-color .08s ease,border-color .08s ease,color .08s ease; }
+    .answer-feedback-correct { background:#2e9b52 !important; border-color:#2e9b52 !important; color:#fff !important; }
+    .answer-feedback-wrong { background:#c94343 !important; border-color:#c94343 !important; color:#fff !important; }
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
       .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
@@ -476,6 +479,8 @@ body.quiz-active { overscroll-behavior:none; }
     status.textContent = "";
     fretGrid.classList.toggle("hidden", roundOptions.game !== "find");
     noteGrid.classList.toggle("hidden", roundOptions.game !== "name");
+    clearAnswerFeedback(fretButtons);
+    clearAnswerFeedback(noteButtons);
     fretButtons.forEach(b => b.disabled = false);
     noteButtons.forEach(b => {
       const pc = Number(b.dataset.pc);
@@ -487,6 +492,23 @@ body.quiz-active { overscroll-behavior:none; }
     raf = requestAnimationFrame(tick);
   }
 
+
+  function clearAnswerFeedback(buttons) {
+    buttons.forEach(b => b.classList.remove("answer-feedback-correct", "answer-feedback-wrong"));
+  }
+
+  function showAnswerFeedback(buttons, chosenValue, correctValue, dataKey) {
+    clearAnswerFeedback(buttons);
+    const chosen = buttons.find(b => Number(b.dataset[dataKey]) === chosenValue);
+    const correct = buttons.find(b => Number(b.dataset[dataKey]) === correctValue);
+    if (chosenValue === correctValue) {
+      if (chosen) chosen.classList.add("answer-feedback-correct");
+      return 190;
+    }
+    if (chosen) chosen.classList.add("answer-feedback-wrong");
+    if (correct) correct.classList.add("answer-feedback-correct");
+    return 480;
+  }
 
   function submitFret(n) {
     if (!current || idx >= MAX_QUESTIONS) return;
@@ -522,9 +544,10 @@ body.quiz-active { overscroll-behavior:none; }
     });
 
     status.textContent = ok ? "Correct." : `Correct fret: ${current.fret}`;
+    const feedbackDelay = showAnswerFeedback(fretButtons, n, current.fret, "fret");
     idx++;
 
-    setTimeout(showQuestion, 220);
+    setTimeout(showQuestion, feedbackDelay);
   }
 
   function submitNote(pc) {
@@ -559,8 +582,9 @@ body.quiz-active { overscroll-behavior:none; }
     });
 
     status.textContent = ok ? "Correct." : `Correct note: ${answerLabel(current.pc, roundOptions.noteSet)}`;
+    const feedbackDelay = showAnswerFeedback(noteButtons, pc, current.pc, "pc");
     idx++;
-    setTimeout(showQuestion, 220);
+    setTimeout(showQuestion, feedbackDelay);
   }
 
   function answerLabel(pc, noteSet = "all") {
