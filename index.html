@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=19" />
+  <link rel="apple-touch-icon" href="icon.svg?v=22" />
   <title>Find the Fret!</title>
   <style>
     :root {
@@ -309,8 +309,18 @@ body.quiz-active { overscroll-behavior:none; }
   let selectedGame = "find";
   let roundOptions = { game:"find", noteSet:"all", string:"all" };
   let comboStats = new Map();
-  let fretZeroCorrectTimes = [];
-  let seenMappings = new Set();
+  let roundBaseline = null;
+  const LEARNING_KEY = "findTheFret.learning.v1";
+  const LONG_ALPHA = 0.15;
+  const ROUND_ALPHA = 0.50;
+  const BASELINE_LONG_ALPHA = 0.10;
+  const BASELINE_ROUND_ALPHA = 0.35;
+  const ERROR_PENALTY = 1.50;
+  const LONG_COEFF = 0.55;
+  const ROUND_COEFF = 0.90;
+  const AGE_COEFF = 0.35;
+  const MAX_WEIGHT = 8;
+  let learningState = loadLearningState();
   const scaleRoots = [
     ["C"],["C#","Db"],["D"],["D#","Eb"],["E"],["F"],
     ["F#","Gb"],["G"],["G#","Ab"],["A"],["A#","Bb"],["B"]
@@ -328,23 +338,134 @@ body.quiz-active { overscroll-behavior:none; }
     return `${familyIndex}|${pc}`;
   }
 
+  function defaultLearningState() {
+    return {
+      version: 2,
+      games: {
+        find: {counter:0, baseline:null, mappings:{}},
+        name: {counter:0, baseline:null, mappings:{}}
+      }
+    };
+  }
+
+  function loadLearningState() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LEARNING_KEY));
+      if (!parsed || !parsed.games || ![1,2].includes(parsed.version)) return defaultLearningState();
+      for (const game of ["find","name"]) {
+        if (!parsed.games[game]) parsed.games[game] = {counter:0, baseline:null, mappings:{}};
+        parsed.games[game].counter ||= 0;
+        parsed.games[game].mappings ||= {};
+        for (const [key, stat] of Object.entries(parsed.games[game].mappings)) {
+          parsed.games[game].mappings[key] = {
+            ...stat,
+            long: Number.isFinite(stat.long) ? stat.long : 1,
+            // v21 tracked global lastSeen. Reset age during migration because
+            // inactive mappings should not age while they are ineligible.
+            age: parsed.version === 2 && Number.isFinite(stat.age) ? stat.age : 0
+          };
+          delete parsed.games[game].mappings[key].lastSeen;
+        }
+      }
+      parsed.version = 2;
+      return parsed;
+    } catch (_) {
+      return defaultLearningState();
+    }
+  }
+
+  function saveLearningState() {
+    try { localStorage.setItem(LEARNING_KEY, JSON.stringify(learningState)); } catch (_) {}
+  }
+
+  function currentGameLearning() {
+    return learningState.games[roundOptions.game] || learningState.games.find;
+  }
+
   function baselineSeconds() {
-    if (!fretZeroCorrectTimes.length) return null;
-    return fretZeroCorrectTimes.reduce((sum, t) => sum + t, 0) / fretZeroCorrectTimes.length;
+    if (roundBaseline != null) return roundBaseline;
+    return currentGameLearning().baseline || null;
+  }
+
+  function mappingLearning(key) {
+    const game = currentGameLearning();
+    const stat = game.mappings[key];
+    if (!stat) return {long:1, age:0};
+    return {
+      ...stat,
+      long: Number.isFinite(stat.long) ? stat.long : 1,
+      age: Number.isFinite(stat.age) ? stat.age : 0
+    };
+  }
+
+  function activeMappingCount() {
+    return activeFamilies().length * (roundOptions.noteSet === "naturals" ? 7 : 12);
+  }
+
+  function ageTarget() {
+    return 2 * activeMappingCount();
   }
 
   function reinforcementWeight(key) {
-    const stat = comboStats.get(key);
-    if (!stat) return 1;
+    const persistent = mappingLearning(key);
+    const round = comboStats.get(key);
+    const longDifficulty = persistent.long;
+    const roundDifficulty = round && Number.isFinite(round.ewma) ? round.ewma : 1;
+    const target = ageTarget();
 
+    const exponent =
+      LONG_COEFF * (longDifficulty - 1) +
+      ROUND_COEFF * (roundDifficulty - 1) +
+      AGE_COEFF * Math.pow(persistent.age / target, 4);
+
+    return Math.min(MAX_WEIGHT, Math.max(0.20, Math.exp(exponent)));
+  }
+
+  function advanceEligibleAges(keys, chosenKey) {
+    const game = currentGameLearning();
+    const uniqueKeys = [...new Set(keys)];
+    game.counter += 1;
+    uniqueKeys.forEach(key => {
+      const stat = mappingLearning(key);
+      game.mappings[key] = {
+        ...stat,
+        age: key === chosenKey ? 0 : stat.age + 1
+      };
+    });
+    saveLearningState();
+  }
+
+  function updateLearning(key, seconds, ok, fret) {
+    const game = currentGameLearning();
     const baseline = baselineSeconds();
-    const avgCorrect = stat.correctCount ? stat.correctTimeTotal / stat.correctCount : null;
-    const ratio = baseline && avgCorrect ? Math.max(1, avgCorrect / baseline) : 1;
-    // Stronger but still continuous reinforcement: each 1× slowdown above baseline
-    // adds 1.5× weight, capped so difficult mappings cannot dominate forever.
-    const speedWeight = 1 + 1.5 * (ratio - 1);
-    const errorWeight = stat.errorBoost || 1;
-    return Math.min(4, speedWeight * errorWeight);
+
+    // Until we have a measured fret-0 baseline, timing is treated as neutral.
+    // Errors can still reinforce immediately.
+    let ratio = baseline ? seconds / baseline : 1;
+    ratio = Math.max(0.75, Math.min(4, ratio));
+    const performance = ratio + (ok ? 0 : ERROR_PENALTY);
+
+    const round = comboStats.get(key) || {ewma:1};
+    round.ewma = (1 - ROUND_ALPHA) * round.ewma + ROUND_ALPHA * performance;
+    comboStats.set(key, round);
+
+    const persistent = mappingLearning(key);
+    const oldLong = Number.isFinite(persistent.long) ? persistent.long : 1;
+    persistent.long = (1 - LONG_ALPHA) * oldLong + LONG_ALPHA * performance;
+    game.mappings[key] = persistent;
+
+    // Correct open-string/self-note responses maintain both a fast current-round
+    // baseline and a slower persistent baseline for future rounds.
+    if (ok && fret === 0) {
+      roundBaseline = roundBaseline == null
+        ? seconds
+        : (1 - BASELINE_ROUND_ALPHA) * roundBaseline + BASELINE_ROUND_ALPHA * seconds;
+      game.baseline = game.baseline == null
+        ? seconds
+        : (1 - BASELINE_LONG_ALPHA) * game.baseline + BASELINE_LONG_ALPHA * seconds;
+    }
+
+    saveLearningState();
   }
 
   function weightedChoice(items) {
@@ -391,11 +512,8 @@ body.quiz-active { overscroll-behavior:none; }
     const eligible = candidates.filter(c => !(last && c.familyIndex === last.familyIndex && c.pc === last.pc));
     const pool = eligible.length ? eligible : candidates;
 
-    // Coverage phase: every mapping must appear once before reinforced repeats
-    // are allowed to take over. E/e already share the same mapping key.
-    const unseen = pool.filter(c => !seenMappings.has(c.key));
-    const chosen = unseen.length ? weightedChoice(unseen) : weightedChoice(pool);
-    seenMappings.add(chosen.key);
+    const chosen = weightedChoice(pool);
+    advanceEligibleAges(candidates.map(c => c.key), chosen.key);
     const s = chosen.family[Math.floor(Math.random() * chosen.family.length)];
     const q = {
       s,
@@ -532,16 +650,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     const ok = n === current.fret;
     const seconds = ms / 1000;
-    const stat = comboStats.get(current.key) || {correctTimeTotal:0, correctCount:0, errorBoost:1};
-    if (ok) {
-      stat.correctTimeTotal += seconds;
-      stat.correctCount += 1;
-      stat.errorBoost = Math.max(1, (stat.errorBoost || 1) - 0.25);
-      if (current.fret === 0) fretZeroCorrectTimes.push(seconds);
-    } else {
-      stat.errorBoost = 1.75;
-    }
-    comboStats.set(current.key, stat);
+    updateLearning(current.key, seconds, ok, current.fret);
 
     results.push({
       q: idx+1,
@@ -570,16 +679,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     const ok = pc === current.pc;
     const seconds = ms / 1000;
-    const stat = comboStats.get(current.key) || {correctTimeTotal:0, correctCount:0, errorBoost:1};
-    if (ok) {
-      stat.correctTimeTotal += seconds;
-      stat.correctCount += 1;
-      stat.errorBoost = Math.max(1, (stat.errorBoost || 1) - 0.25);
-      if (current.fret === 0) fretZeroCorrectTimes.push(seconds);
-    } else {
-      stat.errorBoost = 1.75;
-    }
-    comboStats.set(current.key, stat);
+    updateLearning(current.key, seconds, ok, current.fret);
 
     results.push({
       q: idx+1,
@@ -686,7 +786,7 @@ body.quiz-active { overscroll-behavior:none; }
   function beginRound() {
     roundOptions = { game:selectedGame, noteSet:noteSetSelect.value, string:stringSelect.value };
     setupStatus.textContent = "";
-    idx = 0; results = []; last = null; comboStats = new Map(); fretZeroCorrectTimes = []; seenMappings = new Set();
+    idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null;
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
     resultsCard.classList.add("hidden");
@@ -697,7 +797,7 @@ body.quiz-active { overscroll-behavior:none; }
 
   function restartRound() {
     cancelAnimationFrame(raf);
-    idx = 0; results = []; last = null; comboStats = new Map(); fretZeroCorrectTimes = []; seenMappings = new Set();
+    idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null;
     status.textContent = "";
     showQuestion();
   }
