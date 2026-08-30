@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=16" />
+  <link rel="apple-touch-icon" href="icon.svg?v=17" />
   <title>Find the Fret!</title>
   <style>
     :root {
@@ -59,6 +59,15 @@ body.quiz-active { overscroll-behavior:none; }
     .scale-result { font-size:25px; font-weight:750; line-height:1.15; }
     .small-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
     .small-actions button { min-height:36px; font-size:13px; }
+    .app-header { display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; }
+    .app-header h1 { margin-right:auto; }
+    .menu-wrap { position:relative; }
+    .menu-btn { min-width:44px; padding:0 12px; font-size:20px; }
+    .game-menu { position:absolute; right:0; top:50px; z-index:20; width:min(260px,calc(100vw - 24px)); background:var(--card); border:1px solid var(--line); border-radius:14px; padding:6px; box-shadow:0 10px 28px rgba(0,0,0,.18); }
+    .game-menu button { width:100%; background:transparent; color:var(--text); border:0; text-align:left; justify-content:flex-start; font-weight:600; }
+    .game-menu button.active { background:var(--bg); }
+    .note-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    .note-btn { min-height:50px; padding:0 5px; font-size:16px; line-height:1.1; }
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
       .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
@@ -73,12 +82,22 @@ body.quiz-active { overscroll-behavior:none; }
 </head>
 <body>
 <main>
-  <h1>Find the Fret!</h1>
-  <div class="muted">Find the fret • timed automatically • E A D G B e</div>
+  <div class="app-header">
+    <h1>Find the Fret!</h1>
+    <div class="menu-wrap">
+      <button type="button" id="menuBtn" class="secondary menu-btn" aria-expanded="false" aria-controls="gameMenu" aria-label="Choose game">☰</button>
+      <div id="gameMenu" class="game-menu hidden" role="menu">
+        <button type="button" data-game="find" class="active" role="menuitem">Find the Fret!</button>
+        <button type="button" data-game="name" role="menuitem">Name the Note</button>
+        <button type="button" data-game="scale" role="menuitem">Random Scale &amp; Mode</button>
+      </div>
+    </div>
+  </div>
+  <div class="muted" id="viewSubtitle">Find the fret • timed automatically • E A D G B e</div>
 
   <section class="card" id="setup">
-    <div class="section-title">Round setup</div>
-    <div class="muted">Choose the note set and, if you want, practise one string only.</div>
+    <div class="section-title" id="setupTitle">Find the Fret!</div>
+    <div class="muted" id="setupHelp">Choose the note set and, if you want, practise one string only.</div>
 
     <label class="muted" for="noteSetSelect" style="display:block;margin-top:10px">Notes</label>
     <select id="noteSetSelect" style="width:100%;margin-top:6px">
@@ -101,7 +120,7 @@ body.quiz-active { overscroll-behavior:none; }
     <div class="status" id="setupStatus"></div>
   </section>
 
-  <section class="card" id="scaleSection">
+  <section class="card hidden" id="scaleSection">
     <div class="section-title">Random Scale &amp; Mode</div>
     <div class="muted">Choose what you want to practise, then draw a random root + mode + scale type.</div>
 
@@ -164,6 +183,20 @@ body.quiz-active { overscroll-behavior:none; }
           <button type="button" class="fret-btn" data-fret="10">10</button>
           <button type="button" class="fret-btn" data-fret="11">11</button>
         </div>
+        <div class="note-grid hidden" id="noteGrid" aria-label="Choose note">
+          <button type="button" class="note-btn" data-pc="0">C/B♯</button>
+          <button type="button" class="note-btn" data-pc="1">C♯/D♭</button>
+          <button type="button" class="note-btn" data-pc="2">D</button>
+          <button type="button" class="note-btn" data-pc="3">D♯/E♭</button>
+          <button type="button" class="note-btn" data-pc="4">E/F♭</button>
+          <button type="button" class="note-btn" data-pc="5">F/E♯</button>
+          <button type="button" class="note-btn" data-pc="6">F♯/G♭</button>
+          <button type="button" class="note-btn" data-pc="7">G</button>
+          <button type="button" class="note-btn" data-pc="8">G♯/A♭</button>
+          <button type="button" class="note-btn" data-pc="9">A</button>
+          <button type="button" class="note-btn" data-pc="10">A♯/B♭</button>
+          <button type="button" class="note-btn" data-pc="11">B/C♭</button>
+        </div>
 
         <div class="round-actions">
           <button type="button" id="restartInline" class="secondary">Restart</button>
@@ -186,7 +219,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     <div class="scroll">
       <table>
-        <thead><tr><th>#</th><th>String</th><th>Note</th><th>Your fret</th><th>Correct</th><th>Time</th></tr></thead>
+        <thead><tr><th>#</th><th>String</th><th id="colPrompt">Note</th><th id="colAnswer">Your fret</th><th id="colCorrect">Correct</th><th>Time</th></tr></thead>
         <tbody id="resultsBody"></tbody>
       </table>
     </div>
@@ -223,6 +256,12 @@ body.quiz-active { overscroll-behavior:none; }
     return Array.isArray(name) ? name[Math.floor(Math.random() * name.length)] : name;
   }
 
+  const menuBtn = document.getElementById("menuBtn");
+  const gameMenu = document.getElementById("gameMenu");
+  const gameMenuButtons = [...gameMenu.querySelectorAll("[data-game]")];
+  const viewSubtitle = document.getElementById("viewSubtitle");
+  const setupTitle = document.getElementById("setupTitle");
+  const setupHelp = document.getElementById("setupHelp");
   const setup = document.getElementById("setup");
   const scaleSection = document.getElementById("scaleSection");
   const quiz = document.getElementById("quiz");
@@ -240,6 +279,11 @@ body.quiz-active { overscroll-behavior:none; }
   const status = document.getElementById("status");
   const fretGrid = document.getElementById("fretGrid");
   const fretButtons = [...document.querySelectorAll(".fret-btn")];
+  const noteGrid = document.getElementById("noteGrid");
+  const noteButtons = [...document.querySelectorAll(".note-btn")];
+  const colPrompt = document.getElementById("colPrompt");
+  const colAnswer = document.getElementById("colAnswer");
+  const colCorrect = document.getElementById("colCorrect");
   const resultsBody = document.getElementById("resultsBody");
   const score = document.getElementById("score");
   const summary = document.getElementById("summary");
@@ -259,7 +303,8 @@ body.quiz-active { overscroll-behavior:none; }
 
   const MAX_QUESTIONS = 1000;
   let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null;
-  let roundOptions = { noteSet:"all", string:"all" };
+  let selectedGame = "find";
+  let roundOptions = { game:"find", noteSet:"all", string:"all" };
   let comboStats = new Map();
   let fretZeroCorrectTimes = [];
   const scaleRoots = [
@@ -354,7 +399,9 @@ body.quiz-active { overscroll-behavior:none; }
   function renderTab(q) {
     const labels = ["e","B","G","D","A","E"];
     const targetVisual = 5 - q.s;
-    return labels.map((lab,i) => `${lab} |--${i===targetVisual ? "?" : "-"}--|${i===targetVisual ? "  ← " + q.note : ""}`).join("\n");
+    const marker = roundOptions.game === "name" ? String(q.fret) : "?";
+    const suffix = roundOptions.game === "find" ? `  ← ${q.note}` : "";
+    return labels.map((lab,i) => `${lab} |--${i===targetVisual ? marker : "-"}--|${i===targetVisual ? suffix : ""}`).join("\n");
   }
 
   function tick() {
@@ -424,10 +471,17 @@ body.quiz-active { overscroll-behavior:none; }
     const noteLabel = roundOptions.noteSet === "naturals" ? "Naturals" : "With accidentals";
     const stringLabel = roundOptions.string === "all" ? "All strings" : `${strings[Number(roundOptions.string)].name} string`;
     progress.textContent = `${noteLabel} · ${stringLabel} · Question ${idx+1}`;
-    target.textContent = current.note;
+    target.textContent = roundOptions.game === "find" ? current.note : "Name the note";
     tab.textContent = renderTab(current);
     status.textContent = "";
+    fretGrid.classList.toggle("hidden", roundOptions.game !== "find");
+    noteGrid.classList.toggle("hidden", roundOptions.game !== "name");
     fretButtons.forEach(b => b.disabled = false);
+    noteButtons.forEach(b => {
+      const pc = Number(b.dataset.pc);
+      b.disabled = false;
+      b.classList.toggle("hidden", roundOptions.noteSet === "naturals" && ![0,2,4,5,7,9,11].includes(pc));
+    });
     startedAt = performance.now();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(tick);
@@ -473,11 +527,60 @@ body.quiz-active { overscroll-behavior:none; }
     setTimeout(showQuestion, 220);
   }
 
+  function submitNote(pc) {
+    if (!current || idx >= MAX_QUESTIONS) return;
+    noteButtons.forEach(b => b.disabled = true);
+
+    const ms = performance.now() - startedAt;
+    cancelAnimationFrame(raf);
+    timer.textContent = (ms/1000).toFixed(2) + " s";
+
+    const ok = pc === current.pc;
+    const seconds = ms / 1000;
+    const stat = comboStats.get(current.key) || {correctTimeTotal:0, correctCount:0, errorBoost:1};
+    if (ok) {
+      stat.correctTimeTotal += seconds;
+      stat.correctCount += 1;
+      stat.errorBoost = Math.max(1, (stat.errorBoost || 1) - 0.25);
+      if (current.fret === 0) fretZeroCorrectTimes.push(seconds);
+    } else {
+      stat.errorBoost = 1.5;
+    }
+    comboStats.set(current.key, stat);
+
+    results.push({
+      q: idx+1,
+      string: strings[current.s].name,
+      fret: current.fret,
+      answerPc: pc,
+      correctPc: current.pc,
+      ok,
+      seconds: +seconds.toFixed(2)
+    });
+
+    status.textContent = ok ? "Correct." : `Correct note: ${answerLabel(current.pc, roundOptions.noteSet)}`;
+    idx++;
+    setTimeout(showQuestion, 220);
+  }
+
+  function answerLabel(pc, noteSet = "all") {
+    const natural = {0:"C",2:"D",4:"E",5:"F",7:"G",9:"A",11:"B"};
+    if (noteSet === "naturals" && natural[pc]) return natural[pc];
+    return ["C/B♯","C♯/D♭","D","D♯/E♭","E/F♭","F/E♯","F♯/G♭","G","G♯/A♭","A","A♯/B♭","B/C♭"][pc];
+  }
+
   fretGrid.addEventListener("pointerdown", e => {
     const btn = e.target.closest(".fret-btn");
     if (!btn || btn.disabled) return;
     e.preventDefault();
     submitFret(Number(btn.dataset.fret));
+  });
+
+  noteGrid.addEventListener("pointerdown", e => {
+    const btn = e.target.closest(".note-btn");
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    submitNote(Number(btn.dataset.pc));
   });
 
   function finishRound() {
@@ -487,13 +590,17 @@ body.quiz-active { overscroll-behavior:none; }
     document.body.classList.remove("quiz-active");
 
     const correctCount = results.filter(r=>r.ok).length;
+    const isName = roundOptions.game === "name";
+    colPrompt.textContent = isName ? "Fret" : "Note";
+    colAnswer.textContent = isName ? "Your note" : "Your fret";
+    colCorrect.textContent = isName ? "Correct" : "Correct";
 
     if (results.length === 0) {
       score.textContent = "0/0";
       summary.textContent = "no completed answers";
       resultsBody.innerHTML = "";
       exportBox.value = [
-        "Find the Fret! results",
+        isName ? "Name the Note results" : "Find the Fret! results",
         `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
         `Strings: ${roundOptions.string === "all" ? "All strings" : strings[Number(roundOptions.string)].name}`,
         "Score: 0/0",
@@ -504,31 +611,46 @@ body.quiz-active { overscroll-behavior:none; }
 
     const avg = results.reduce((s,r)=>s+r.seconds,0)/results.length;
     const fastest = Math.min(...results.map(r=>r.seconds));
-
     score.textContent = `${correctCount}/${results.length}`;
     const capReached = results.length >= MAX_QUESTIONS;
     summary.textContent = `${capReached ? "limit reached • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
 
-    resultsBody.innerHTML = results.map(r =>
-      `<tr><td>${r.q}</td><td>${r.string}</td><td>${r.note}</td><td>${r.answer}</td><td>${r.correct}</td><td>${r.seconds.toFixed(2)} s ${r.ok ? "✓" : "✕"}</td></tr>`
-    ).join("");
-
-    const lines = [
-      "Find the Fret! results",
-      `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
+    if (isName) {
+      resultsBody.innerHTML = results.map(r =>
+        `<tr><td>${r.q}</td><td>${r.string}</td><td>${r.fret}</td><td>${answerLabel(r.answerPc, roundOptions.noteSet)}</td><td>${answerLabel(r.correctPc, roundOptions.noteSet)}</td><td>${r.seconds.toFixed(2)} s ${r.ok ? "✓" : "✕"}</td></tr>`
+      ).join("");
+      exportBox.value = [
+        "Name the Note results",
+        `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
         `Strings: ${roundOptions.string === "all" ? "All strings" : strings[Number(roundOptions.string)].name}`,
-      `Score: ${correctCount}/${results.length}`,
-      `Average: ${avg.toFixed(2)} s`,
-      "",
-      "| # | String | Note | Answer | Correct fret | Time (s) | Result |",
-      "|---:|:---:|:---:|---:|---:|---:|:---:|",
-      ...results.map(r => `| ${r.q} | ${r.string} | ${r.note} | ${r.answer} | ${r.correct} | ${r.seconds.toFixed(2)} | ${r.ok ? "✓" : "✕"} |`)
-    ];
-    exportBox.value = lines.join("\n");
+        `Score: ${correctCount}/${results.length}`,
+        `Average: ${avg.toFixed(2)} s`,
+        "",
+        "| # | String | Fret | Answer | Correct note | Time (s) | Result |",
+        "|---:|:---:|---:|:---:|:---:|---:|:---:|",
+        ...results.map(r => `| ${r.q} | ${r.string} | ${r.fret} | ${answerLabel(r.answerPc, roundOptions.noteSet)} | ${answerLabel(r.correctPc, roundOptions.noteSet)} | ${r.seconds.toFixed(2)} | ${r.ok ? "✓" : "✕"} |`)
+      ].join("\n");
+    } else {
+      resultsBody.innerHTML = results.map(r =>
+        `<tr><td>${r.q}</td><td>${r.string}</td><td>${r.note}</td><td>${r.answer}</td><td>${r.correct}</td><td>${r.seconds.toFixed(2)} s ${r.ok ? "✓" : "✕"}</td></tr>`
+      ).join("");
+      exportBox.value = [
+        "Find the Fret! results",
+        `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
+        `Strings: ${roundOptions.string === "all" ? "All strings" : strings[Number(roundOptions.string)].name}`,
+        `Score: ${correctCount}/${results.length}`,
+        `Average: ${avg.toFixed(2)} s`,
+        "",
+        "| # | String | Note | Answer | Correct fret | Time (s) | Result |",
+        "|---:|:---:|:---:|---:|---:|---:|:---:|",
+        ...results.map(r => `| ${r.q} | ${r.string} | ${r.note} | ${r.answer} | ${r.correct} | ${r.seconds.toFixed(2)} | ${r.ok ? "✓" : "✕"} |`)
+      ].join("\n");
+    }
   }
 
+
   function beginRound() {
-    roundOptions = { noteSet:noteSetSelect.value, string:stringSelect.value };
+    roundOptions = { game:selectedGame, noteSet:noteSetSelect.value, string:stringSelect.value };
     setupStatus.textContent = "";
     idx = 0; results = []; last = null; comboStats = new Map(); fretZeroCorrectTimes = [];
     setup.classList.add("hidden");
@@ -547,6 +669,47 @@ body.quiz-active { overscroll-behavior:none; }
   }
 
 
+  function closeMenu() {
+    gameMenu.classList.add("hidden");
+    menuBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function showGame(game) {
+    cancelAnimationFrame(raf);
+    document.body.classList.remove("quiz-active");
+    quiz.classList.add("hidden");
+    resultsCard.classList.add("hidden");
+    setup.classList.add("hidden");
+    scaleSection.classList.add("hidden");
+    selectedGame = game;
+    gameMenuButtons.forEach(b => b.classList.toggle("active", b.dataset.game === game));
+
+    if (game === "scale") {
+      viewSubtitle.textContent = "Random root + mode + scale type";
+      scaleSection.classList.remove("hidden");
+    } else {
+      const isName = game === "name";
+      viewSubtitle.textContent = isName ? "Name the note • timed automatically • E A D G B e" : "Find the fret • timed automatically • E A D G B e";
+      setupTitle.textContent = isName ? "Name the Note" : "Find the Fret!";
+      setupHelp.textContent = isName
+        ? "See a fret on the TAB and identify its note. Choose the note set and, if you want, practise one string only."
+        : "Choose the note set and, if you want, practise one string only.";
+      startRoundBtn.textContent = isName ? "Start Name the Note" : "Start round";
+      setup.classList.remove("hidden");
+    }
+    closeMenu();
+  }
+
+  menuBtn.addEventListener("click", () => {
+    const willOpen = gameMenu.classList.contains("hidden");
+    gameMenu.classList.toggle("hidden", !willOpen);
+    menuBtn.setAttribute("aria-expanded", String(willOpen));
+  });
+  gameMenuButtons.forEach(btn => btn.addEventListener("click", () => showGame(btn.dataset.game)));
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".menu-wrap")) closeMenu();
+  });
+
   startRoundBtn.addEventListener("click", beginRound);
   noteSetSelect.addEventListener("change", () => setupStatus.textContent = "");
   restartInline.addEventListener("pointerdown", e => {
@@ -564,8 +727,7 @@ body.quiz-active { overscroll-behavior:none; }
   againBtn.addEventListener("click", () => {
     document.body.classList.remove("quiz-active");
     resultsCard.classList.add("hidden");
-    setup.classList.remove("hidden");
-    scaleSection.classList.remove("hidden");
+    showGame(selectedGame);
   });
 
   copyBtn.addEventListener("click", async () => {
@@ -594,6 +756,7 @@ body.quiz-active { overscroll-behavior:none; }
     saveScalePrefs();
   });
   loadScalePrefs();
+  showGame("find");
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(()=>{}));
