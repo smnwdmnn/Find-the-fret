@@ -79,6 +79,22 @@ body.quiz-active { overscroll-behavior:none; }
     .interval-number-btn { min-height:46px; padding:0; font-size:17px; }
     .interval-pending { text-align:center; min-height:18px; font-size:15px; }
     .iti-note-summary { font-size:13px; line-height:1.45; }
+    .stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+    .stat-box { border:1px solid var(--line); border-radius:10px; padding:9px; background:var(--bg); }
+    .stat-value { font-size:20px; font-weight:750; margin-top:2px; }
+    .heatmap-wrap { overflow-x:auto; margin-top:10px; }
+    .heatmap { border-collapse:separate; border-spacing:3px; width:max-content; min-width:100%; }
+    .heatmap th { font-size:11px; font-weight:600; color:var(--muted); padding:2px 4px; text-align:center; }
+    .heatmap td { min-width:42px; height:38px; padding:2px 4px; border-radius:7px; text-align:center; font-size:11px; font-variant-numeric:tabular-nums; border:1px solid rgba(0,0,0,.06); }
+    .heatmap td.empty { background:var(--bg); color:var(--muted); border:1px dashed var(--line); }
+    .heatmap-legend { display:flex; justify-content:space-between; gap:8px; margin-top:4px; font-size:11px; color:var(--muted); }
+    details.raw-details { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+    details.raw-details summary { cursor:pointer; font-weight:650; }
+    .round-details { margin-top:10px; }
+    .detail-table { width:100%; border-collapse:collapse; margin-top:8px; font-size:12px; }
+    .detail-table th,.detail-table td { padding:5px 4px; border-bottom:1px solid var(--line); text-align:left; }
+    .interval-stat-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:10px; }
+    .interval-stat { border:1px solid var(--line); border-radius:8px; padding:7px; text-align:center; font-size:11px; }
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
       .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
@@ -102,6 +118,7 @@ body.quiz-active { overscroll-behavior:none; }
         <button type="button" data-game="name" role="menuitem">Name the Note</button>
         <button type="button" data-game="interval" role="menuitem">Investigate the Interval</button>
         <button type="button" data-game="scale" role="menuitem">Random Scale &amp; Mode</button>
+        <button type="button" data-game="stats" role="menuitem">Stats</button>
       </div>
     </div>
   </div>
@@ -168,6 +185,24 @@ body.quiz-active { overscroll-behavior:none; }
 
     <button type="button" id="randomScaleBtn" style="width:100%;margin-top:10px">Random scale</button>
     <div class="status" id="scaleStatus"></div>
+  </section>
+
+  <section class="card hidden" id="statsSection">
+    <div class="section-title">Long-term Stats</div>
+    <div class="muted">Persistent all-time attempt history stored on this device.</div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <select id="statsGameSelect" style="flex:1">
+        <option value="find">Find the Fret!</option>
+        <option value="name">Name the Note</option>
+        <option value="interval">Investigate the Interval</option>
+      </select>
+      <select id="statsNoteSetSelect" style="flex:1">
+        <option value="allHistory">All note sets</option>
+        <option value="naturals">Naturals only</option>
+        <option value="all">With accidentals</option>
+      </select>
+    </div>
+    <div id="statsContent" style="margin-top:10px"><div class="muted">No persistent attempts yet.</div></div>
   </section>
 
   <section class="card hidden" id="quiz">
@@ -245,22 +280,26 @@ body.quiz-active { overscroll-behavior:none; }
       <div id="summary" class="muted"></div>
     </div>
 
-    <div class="scroll">
-      <table>
-        <thead><tr><th>#</th><th id="colString">String</th><th id="colPrompt">Note</th><th id="colAnswer">Your fret</th><th id="colCorrect">Correct</th><th>Time</th></tr></thead>
-        <tbody id="resultsBody"></tbody>
-      </table>
-    </div>
+    <div id="roundDiagnostics" class="round-details"></div>
 
     <div style="margin-top:12px" class="row">
       <button id="copyBtn">Copy results</button>
       <button id="againBtn" class="secondary">New round</button>
     </div>
 
-    <div style="margin-top:10px">
-      <div class="muted">Copy/paste this into ChatGPT:</div>
-      <textarea id="exportBox" readonly></textarea>
-    </div>
+    <details class="raw-details" id="rawDetails">
+      <summary>Raw data</summary>
+      <div class="scroll" style="margin-top:8px;max-height:280px">
+        <table>
+          <thead><tr><th>#</th><th id="colString">String</th><th id="colPrompt">Note</th><th id="colAnswer">Your fret</th><th id="colCorrect">Correct</th><th>Time</th></tr></thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:10px">
+        <div class="muted">Copy/paste this into ChatGPT:</div>
+        <textarea id="exportBox" readonly style="min-height:110px;max-height:180px"></textarea>
+      </div>
+    </details>
   </section>
 </main>
 
@@ -292,6 +331,10 @@ body.quiz-active { overscroll-behavior:none; }
   const setupHelp = document.getElementById("setupHelp");
   const setup = document.getElementById("setup");
   const scaleSection = document.getElementById("scaleSection");
+  const statsSection = document.getElementById("statsSection");
+  const statsGameSelect = document.getElementById("statsGameSelect");
+  const statsNoteSetSelect = document.getElementById("statsNoteSetSelect");
+  const statsContent = document.getElementById("statsContent");
   const quiz = document.getElementById("quiz");
   const resultsCard = document.getElementById("resultsCard");
   const noteSetSelect = document.getElementById("noteSetSelect");
@@ -326,6 +369,8 @@ body.quiz-active { overscroll-behavior:none; }
   const copyBtn = document.getElementById("copyBtn");
   const againBtn = document.getElementById("againBtn");
   const exportBox = document.getElementById("exportBox");
+  const roundDiagnostics = document.getElementById("roundDiagnostics");
+  const rawDetails = document.getElementById("rawDetails");
   const modeGrid = document.getElementById("modeGrid");
   const modeChecks = [...modeGrid.querySelectorAll('input[type="checkbox"]')];
   const diatonicToggle = document.getElementById("diatonicToggle");
@@ -338,6 +383,8 @@ body.quiz-active { overscroll-behavior:none; }
   const scaleStatus = document.getElementById("scaleStatus");
 
   const MAX_QUESTIONS = 1000;
+  const HISTORY_DB = "findTheFret.history.v1";
+  const HISTORY_STORE = "attempts";
   let idx = 0, current = null, startedAt = 0, raf = null, results = [], last = null;
   let selectedGame = "find";
   let roundOptions = { game:"find", noteSet:"all", string:"all" };
@@ -372,6 +419,156 @@ body.quiz-active { overscroll-behavior:none; }
   ];
   const SCALE_PREFS_KEY = "findTheFret.scalePrefs.v1";
   let lastScaleKey = null;
+
+  function openHistoryDb() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) return reject(new Error("IndexedDB unavailable"));
+      const req = indexedDB.open(HISTORY_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(HISTORY_STORE)) {
+          const store = db.createObjectStore(HISTORY_STORE, {keyPath:"id", autoIncrement:true});
+          store.createIndex("game", "game", {unique:false});
+          store.createIndex("timestamp", "timestamp", {unique:false});
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function persistAttempt(record) {
+    try {
+      const db = await openHistoryDb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(HISTORY_STORE, "readwrite");
+        tx.objectStore(HISTORY_STORE).add(record);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    } catch (_) {
+      // Reinforcement data still persists separately even if history storage fails.
+    }
+  }
+
+  async function loadAttemptHistory() {
+    try {
+      const db = await openHistoryDb();
+      const rows = await new Promise((resolve, reject) => {
+        const tx = db.transaction(HISTORY_STORE, "readonly");
+        const req = tx.objectStore(HISTORY_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      db.close();
+      return rows;
+    } catch (_) { return []; }
+  }
+
+  function median(values) {
+    if (!values.length) return null;
+    const a = [...values].sort((x,y)=>x-y), m = Math.floor(a.length/2);
+    return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+  }
+
+  function heatColor(value, min, max) {
+    if (!Number.isFinite(value)) return "";
+    const t = max > min ? Math.max(0, Math.min(1, (value-min)/(max-min))) : 0;
+    const hue = 120 * (1 - t);
+    return `hsl(${hue} 68% 78%)`;
+  }
+
+  function mappingHeatmap(rows, title="Fretboard heat map") {
+    const by = new Map();
+    rows.forEach(r => {
+      if (!Number.isInteger(r.stringIndex) || !Number.isInteger(r.fret)) return;
+      const key = `${r.stringIndex}|${r.fret}`;
+      if (!by.has(key)) by.set(key, []);
+      by.get(key).push(r.seconds);
+    });
+    const avgs = [...by.values()].map(v=>v.reduce((a,b)=>a+b,0)/v.length);
+    if (!avgs.length) return `<div class="muted">No fretboard data for this selection.</div>`;
+    const min = Math.min(...avgs), max = Math.max(...avgs);
+    let html = `<div class="section-title" style="font-size:15px">${title}</div><div class="heatmap-wrap"><table class="heatmap"><thead><tr><th></th>${Array.from({length:12},(_,f)=>`<th>${f}</th>`).join("")}</tr></thead><tbody>`;
+    for (let s=5; s>=0; s--) {
+      html += `<tr><th>${strings[s].name}</th>`;
+      for (let f=0; f<12; f++) {
+        const vals = by.get(`${s}|${f}`);
+        if (!vals) html += `<td class="empty">—</td>`;
+        else {
+          const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+          html += `<td style="background:${heatColor(avg,min,max)}" title="${strings[s].name}${f}: ${avg.toFixed(2)} s, n=${vals.length}"><strong>${avg.toFixed(1)}</strong><br><span>n${vals.length}</span></td>`;
+        }
+      }
+      html += `</tr>`;
+    }
+    html += `</tbody></table></div><div class="heatmap-legend"><span>faster ${min.toFixed(2)} s</span><span>slower ${max.toFixed(2)} s</span></div>`;
+    return html;
+  }
+
+  function aggregateTable(rows, keyFn, labelFn) {
+    const groups = new Map();
+    rows.forEach(r => { const k=keyFn(r); if (k==null) return; if(!groups.has(k))groups.set(k,[]); groups.get(k).push(r); });
+    return [...groups.entries()].map(([k,v])=>({
+      key:k, label:labelFn(k,v), n:v.length,
+      acc:v.filter(r=>r.correct).length/v.length*100,
+      avg:v.reduce((a,r)=>a+r.seconds,0)/v.length,
+      med:median(v.map(r=>r.seconds))
+    }));
+  }
+
+  function statsBoxes(rows) {
+    if (!rows.length) return "";
+    const acc=rows.filter(r=>r.correct).length/rows.length*100;
+    const avg=rows.reduce((a,r)=>a+r.seconds,0)/rows.length;
+    const med=median(rows.map(r=>r.seconds));
+    return `<div class="stats-grid"><div class="stat-box"><div class="muted">Attempts</div><div class="stat-value">${rows.length}</div></div><div class="stat-box"><div class="muted">Accuracy</div><div class="stat-value">${acc.toFixed(1)}%</div></div><div class="stat-box"><div class="muted">Average</div><div class="stat-value">${avg.toFixed(2)} s</div></div><div class="stat-box"><div class="muted">Median</div><div class="stat-value">${med.toFixed(2)} s</div></div></div>`;
+  }
+
+  function detailTable(title, data) {
+    if (!data.length) return "";
+    return `<div class="section-title" style="font-size:15px;margin-top:12px">${title}</div><table class="detail-table"><thead><tr><th></th><th>n</th><th>Acc.</th><th>Avg.</th><th>Median</th></tr></thead><tbody>${data.map(d=>`<tr><td>${d.label}</td><td>${d.n}</td><td>${d.acc.toFixed(0)}%</td><td>${d.avg.toFixed(2)} s</td><td>${d.med.toFixed(2)} s</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function roundRowsForStats(game, roundResults) {
+    if (game === "find") return roundResults.map(r=>({game, stringIndex:strings.findIndex(s=>s.name===r.string), fret:r.correct, seconds:r.seconds, correct:r.ok, noteSet:roundOptions.noteSet}));
+    if (game === "name") return roundResults.map(r=>({game, stringIndex:strings.findIndex(s=>s.name===r.string), fret:r.fret, seconds:r.seconds, correct:r.ok, noteSet:roundOptions.noteSet}));
+    return [];
+  }
+
+  function renderRoundDiagnostics() {
+    if (!results.length) { roundDiagnostics.innerHTML=""; return; }
+    if (roundOptions.game === "interval") {
+      const intervalRows = results.map(r=>({label:r.intervalCorrect, correct:r.intervalOk, seconds:r.seconds}));
+      const groups = new Map();
+      intervalRows.forEach(r=>{if(!groups.has(r.label))groups.set(r.label,[]);groups.get(r.label).push(r)});
+      roundDiagnostics.innerHTML = `<div class="section-title" style="font-size:15px">Round interval detail</div><div class="interval-stat-grid">${[...groups.entries()].map(([label,v])=>`<div class="interval-stat"><strong>${label}</strong><br>${v.filter(x=>x.correct).length}/${v.length}</div>`).join("")}</div>`;
+      return;
+    }
+    const rows=roundRowsForStats(roundOptions.game, results);
+    const byString=aggregateTable(rows,r=>r.stringIndex,k=>strings[Number(k)].name);
+    const byFret=aggregateTable(rows,r=>r.fret,k=>String(k));
+    roundDiagnostics.innerHTML = statsBoxes(rows) + mappingHeatmap(rows,"This round") + detailTable("By string",byString) + detailTable("By fret",byFret);
+  }
+
+  async function renderLongTermStats() {
+    statsContent.innerHTML = `<div class="muted">Loading…</div>`;
+    const all = await loadAttemptHistory();
+    const game = statsGameSelect.value;
+    const ns = statsNoteSetSelect.value;
+    const rows = all.filter(r=>r.game===game && (ns==="allHistory" || r.noteSet===ns));
+    if (!rows.length) { statsContent.innerHTML=`<div class="muted">No persistent attempts yet for this selection. History begins with v25.</div>`; return; }
+    if (game === "interval") {
+      const acc=rows.filter(r=>r.correct).length/rows.length*100;
+      const groups=new Map(); rows.forEach(r=>{const k=r.intervalCorrect||"?";if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)});
+      statsContent.innerHTML=`<div class="stats-grid"><div class="stat-box"><div class="muted">Attempts</div><div class="stat-value">${rows.length}</div></div><div class="stat-box"><div class="muted">Interval accuracy</div><div class="stat-value">${acc.toFixed(1)}%</div></div></div><div class="interval-stat-grid">${[...groups.entries()].map(([k,v])=>`<div class="interval-stat"><strong>${k}</strong><br>${v.filter(x=>x.correct).length}/${v.length}</div>`).join("")}</div>`;
+      return;
+    }
+    const byString=aggregateTable(rows,r=>r.stringIndex,k=>strings[Number(k)].name);
+    const byFret=aggregateTable(rows,r=>r.fret,k=>String(k));
+    statsContent.innerHTML=statsBoxes(rows)+mappingHeatmap(rows,"All-time heat map")+detailTable("By string",byString)+detailTable("By fret",byFret);
+  }
 
   function pitch(open, fret) { return (open + fret) % 12; }
 
@@ -883,6 +1080,7 @@ body.quiz-active { overscroll-behavior:none; }
       ok,
       seconds: +seconds.toFixed(2)
     });
+    persistAttempt({game:"find", noteSet:roundOptions.noteSet, stringIndex:current.s, string:strings[current.s].name, fret:current.fret, targetPc:current.pc, targetNote:current.note, answer:n, correct:ok, seconds:+seconds.toFixed(2), timestamp:Date.now()});
 
     status.textContent = ok ? "Correct." : `Correct fret: ${current.fret}`;
     const feedbackDelay = showAnswerFeedback(fretButtons, n, current.fret, "fret");
@@ -912,6 +1110,7 @@ body.quiz-active { overscroll-behavior:none; }
       ok,
       seconds: +seconds.toFixed(2)
     });
+    persistAttempt({game:"name", noteSet:roundOptions.noteSet, stringIndex:current.s, string:strings[current.s].name, fret:current.fret, answerPc:pc, targetPc:current.pc, correct:ok, seconds:+seconds.toFixed(2), timestamp:Date.now()});
 
     status.textContent = ok ? "Correct." : `Correct note: ${answerLabel(current.pc, roundOptions.noteSet)}`;
     const feedbackDelay = showAnswerFeedback(noteButtons, pc, current.pc, "pc");
@@ -991,6 +1190,7 @@ body.quiz-active { overscroll-behavior:none; }
       ok: itiAnswers.note1.ok && itiAnswers.note2.ok && ok,
       seconds:+(ms/1000).toFixed(2)
     });
+    persistAttempt({game:"interval", noteSet:roundOptions.noteSet, low:{s:current.low.s,fret:current.low.fret,pc:current.low.pc}, high:{s:current.high.s,fret:current.high.fret,pc:current.high.pc}, intervalAnswer:chosenLabel, intervalCorrect:preferred, semitones:current.semitones, note1Correct:itiAnswers.note1.ok, note2Correct:itiAnswers.note2.ok, correct:ok, seconds:+(ms/1000).toFixed(2), timestamp:Date.now()});
     if (ok) {
       status.textContent = equivalents.length > 1 && chosenLabel !== preferred ? `Correct. Also commonly: ${preferred}` : "Correct interval.";
     } else {
@@ -1047,6 +1247,8 @@ body.quiz-active { overscroll-behavior:none; }
       score.textContent = "0/0";
       summary.textContent = "no completed answers";
       resultsBody.innerHTML = "";
+      roundDiagnostics.innerHTML = "";
+      rawDetails.open = false;
       exportBox.value = [
         isInterval ? "Investigate the Interval results" : (isName ? "Name the Note results" : "Find the Fret! results"),
         `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
@@ -1062,6 +1264,8 @@ body.quiz-active { overscroll-behavior:none; }
     score.textContent = `${correctCount}/${results.length}`;
     const capReached = results.length >= MAX_QUESTIONS;
     summary.textContent = `${capReached ? "limit reached • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
+    rawDetails.open = false;
+    renderRoundDiagnostics();
 
     if (isInterval) {
       resultsBody.innerHTML = results.map(r => {
@@ -1119,6 +1323,7 @@ body.quiz-active { overscroll-behavior:none; }
     idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null; itiRoundStats = new Map(); lastIntervalSemitones = null;
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
+    statsSection.classList.add("hidden");
     resultsCard.classList.add("hidden");
     quiz.classList.remove("hidden");
     document.body.classList.add("quiz-active");
@@ -1145,12 +1350,17 @@ body.quiz-active { overscroll-behavior:none; }
     resultsCard.classList.add("hidden");
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
+    statsSection.classList.add("hidden");
     selectedGame = game;
     gameMenuButtons.forEach(b => b.classList.toggle("active", b.dataset.game === game));
 
     if (game === "scale") {
       viewSubtitle.textContent = "Random root + mode + scale type";
       scaleSection.classList.remove("hidden");
+    } else if (game === "stats") {
+      viewSubtitle.textContent = "Long-term persistent performance";
+      statsSection.classList.remove("hidden");
+      renderLongTermStats();
     } else {
       const isName = game === "name";
       const isInterval = game === "interval";
@@ -1216,6 +1426,8 @@ body.quiz-active { overscroll-behavior:none; }
   diatonicToggle.addEventListener("change", saveScalePrefs);
   pentatonicToggle.addEventListener("change", saveScalePrefs);
   randomScaleBtn.addEventListener("click", randomScale);
+  statsGameSelect.addEventListener("change", renderLongTermStats);
+  statsNoteSetSelect.addEventListener("change", renderLongTermStats);
   allModesBtn.addEventListener("click", () => {
     modeChecks.forEach(c => c.checked = true);
     scaleStatus.textContent = "";
