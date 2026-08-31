@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Find the Fret!" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="icon.svg?v=22" />
+  <link rel="apple-touch-icon" href="icon.svg?v=24" />
   <title>Find the Fret!</title>
   <style>
     :root {
@@ -71,6 +71,14 @@ body.quiz-active { overscroll-behavior:none; }
     .answer-feedback-correct, .answer-feedback-wrong { opacity:1 !important; transition:background-color .08s ease,border-color .08s ease,color .08s ease; }
     .answer-feedback-correct { background:#2e9b52 !important; border-color:#2e9b52 !important; color:#fff !important; }
     .answer-feedback-wrong { background:#c94343 !important; border-color:#c94343 !important; color:#fff !important; }
+
+    .interval-panel { display:grid; gap:8px; }
+    .accidental-row { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+    .accidental-btn.selected, .interval-number-btn.selected { background:var(--accent); color:var(--bg); }
+    .interval-number-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:6px; }
+    .interval-number-btn { min-height:46px; padding:0; font-size:17px; }
+    .interval-pending { text-align:center; min-height:18px; font-size:15px; }
+    .iti-note-summary { font-size:13px; line-height:1.45; }
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
       .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
@@ -92,6 +100,7 @@ body.quiz-active { overscroll-behavior:none; }
       <div id="gameMenu" class="game-menu hidden" role="menu">
         <button type="button" data-game="find" class="active" role="menuitem">Find the Fret!</button>
         <button type="button" data-game="name" role="menuitem">Name the Note</button>
+        <button type="button" data-game="interval" role="menuitem">Investigate the Interval</button>
         <button type="button" data-game="scale" role="menuitem">Random Scale &amp; Mode</button>
       </div>
     </div>
@@ -108,6 +117,7 @@ body.quiz-active { overscroll-behavior:none; }
       <option value="all" selected>With accidentals (all notes)</option>
     </select>
 
+    <div id="stringSetupWrap">
     <label class="muted" for="stringSelect" style="display:block;margin-top:10px">String</label>
     <select id="stringSelect" style="width:100%;margin-top:6px">
       <option value="all">All strings</option>
@@ -118,6 +128,7 @@ body.quiz-active { overscroll-behavior:none; }
       <option value="4">B</option>
       <option value="5">e</option>
     </select>
+    </div>
 
     <button id="startRoundBtn" style="width:100%;margin-top:10px">Start round</button>
     <div class="status" id="setupStatus"></div>
@@ -201,6 +212,20 @@ body.quiz-active { overscroll-behavior:none; }
           <button type="button" class="note-btn" data-pc="11">B/C♭</button>
         </div>
 
+        <div class="interval-panel hidden" id="intervalPanel" aria-label="Choose interval">
+          <div class="muted" id="intervalStageLabel">Interval</div>
+          <div class="accidental-row" id="accidentalRow" aria-label="Choose accidental">
+            <button type="button" class="secondary accidental-btn" data-acc="-1">♭</button>
+            <button type="button" class="secondary accidental-btn selected" data-acc="0">♮</button>
+            <button type="button" class="secondary accidental-btn" data-acc="1">♯</button>
+          </div>
+          <div class="interval-number-grid" id="intervalNumberGrid" aria-label="Choose interval number">
+            <button type="button" class="secondary interval-number-btn" data-number="1">1</button><button type="button" class="secondary interval-number-btn" data-number="2">2</button><button type="button" class="secondary interval-number-btn" data-number="3">3</button><button type="button" class="secondary interval-number-btn" data-number="4">4</button><button type="button" class="secondary interval-number-btn" data-number="5">5</button><button type="button" class="secondary interval-number-btn" data-number="6">6</button><button type="button" class="secondary interval-number-btn" data-number="7">7</button><button type="button" class="secondary interval-number-btn" data-number="8">8</button><button type="button" class="secondary interval-number-btn" data-number="9">9</button><button type="button" class="secondary interval-number-btn" data-number="10">10</button><button type="button" class="secondary interval-number-btn" data-number="11">11</button><button type="button" class="secondary interval-number-btn" data-number="12">12</button><button type="button" class="secondary interval-number-btn" data-number="13">13</button>
+          </div>
+          <button type="button" id="submitIntervalBtn" disabled>Submit interval</button>
+          <div class="muted interval-pending" id="intervalPending">♮ —</div>
+        </div>
+
         <div class="round-actions">
           <button type="button" id="restartInline" class="secondary">Restart</button>
           <button type="button" id="stopInline" class="secondary">Stop</button>
@@ -222,7 +247,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     <div class="scroll">
       <table>
-        <thead><tr><th>#</th><th>String</th><th id="colPrompt">Note</th><th id="colAnswer">Your fret</th><th id="colCorrect">Correct</th><th>Time</th></tr></thead>
+        <thead><tr><th>#</th><th id="colString">String</th><th id="colPrompt">Note</th><th id="colAnswer">Your fret</th><th id="colCorrect">Correct</th><th>Time</th></tr></thead>
         <tbody id="resultsBody"></tbody>
       </table>
     </div>
@@ -271,6 +296,7 @@ body.quiz-active { overscroll-behavior:none; }
   const resultsCard = document.getElementById("resultsCard");
   const noteSetSelect = document.getElementById("noteSetSelect");
   const stringSelect = document.getElementById("stringSelect");
+  const stringSetupWrap = document.getElementById("stringSetupWrap");
   const startRoundBtn = document.getElementById("startRoundBtn");
   const setupStatus = document.getElementById("setupStatus");
   const restartInline = document.getElementById("restartInline");
@@ -284,6 +310,13 @@ body.quiz-active { overscroll-behavior:none; }
   const fretButtons = [...document.querySelectorAll(".fret-btn")];
   const noteGrid = document.getElementById("noteGrid");
   const noteButtons = [...document.querySelectorAll(".note-btn")];
+  const intervalPanel = document.getElementById("intervalPanel");
+  const intervalStageLabel = document.getElementById("intervalStageLabel");
+  const accidentalButtons = [...document.querySelectorAll(".accidental-btn")];
+  const intervalNumberButtons = [...document.querySelectorAll(".interval-number-btn")];
+  const submitIntervalBtn = document.getElementById("submitIntervalBtn");
+  const intervalPending = document.getElementById("intervalPending");
+  const colString = document.getElementById("colString");
   const colPrompt = document.getElementById("colPrompt");
   const colAnswer = document.getElementById("colAnswer");
   const colCorrect = document.getElementById("colCorrect");
@@ -310,6 +343,18 @@ body.quiz-active { overscroll-behavior:none; }
   let roundOptions = { game:"find", noteSet:"all", string:"all" };
   let comboStats = new Map();
   let roundBaseline = null;
+  let itiStage = "note1";
+  let itiAnswers = {note1:null,note2:null,acc:0,number:null};
+  let itiRoundStats = new Map();
+  let lastIntervalSemitones = null;
+  const ITI_KEY = "findTheFret.intervalLearning.v1";
+  const ITI_LONG_ALPHA = 0.18;
+  const ITI_ROUND_ALPHA = 0.55;
+  const ITI_LONG_COEFF = 0.70;
+  const ITI_ROUND_COEFF = 1.00;
+  const ITI_AGE_COEFF = 0.25;
+  const ITI_MAX_WEIGHT = 6;
+  let itiLearning = loadItiLearning();
   const LEARNING_KEY = "findTheFret.learning.v1";
   const LONG_ALPHA = 0.15;
   const ROUND_ALPHA = 0.50;
@@ -468,6 +513,170 @@ body.quiz-active { overscroll-behavior:none; }
     saveLearningState();
   }
 
+  function defaultItiLearning() {
+    return {version:1, intervals:{}};
+  }
+
+  function loadItiLearning() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ITI_KEY));
+      if (!parsed || parsed.version !== 1 || !parsed.intervals) return defaultItiLearning();
+      return parsed;
+    } catch (_) { return defaultItiLearning(); }
+  }
+
+  function saveItiLearning() {
+    try { localStorage.setItem(ITI_KEY, JSON.stringify(itiLearning)); } catch (_) {}
+  }
+
+  function itiStat(semitones) {
+    const key = String(semitones);
+    const s = itiLearning.intervals[key] || {long:1, age:0};
+    return {
+      long: Number.isFinite(s.long) ? s.long : 1,
+      age: Number.isFinite(s.age) ? s.age : 0
+    };
+  }
+
+  function itiWeight(semitones) {
+    const persistent = itiStat(semitones);
+    const round = itiRoundStats.get(semitones);
+    const roundDifficulty = round && Number.isFinite(round.ewma) ? round.ewma : 1;
+    const target = 44; // 2 × 22 chromatic interval distances from 1 through 13.
+    const exponent =
+      ITI_LONG_COEFF * (persistent.long - 1) +
+      ITI_ROUND_COEFF * (roundDifficulty - 1) +
+      ITI_AGE_COEFF * Math.pow(persistent.age / target, 4);
+    return Math.min(ITI_MAX_WEIGHT, Math.max(0.25, Math.exp(exponent)));
+  }
+
+  function ageItiIntervals(chosenSemitones) {
+    for (let semi = 0; semi <= 21; semi++) {
+      const s = itiStat(semi);
+      itiLearning.intervals[String(semi)] = {...s, age: semi === chosenSemitones ? 0 : s.age + 1};
+    }
+    saveItiLearning();
+  }
+
+  function updateItiLearning(semitones, ok) {
+    const performance = ok ? 1 : 3;
+    const round = itiRoundStats.get(semitones) || {ewma:1};
+    round.ewma = (1 - ITI_ROUND_ALPHA) * round.ewma + ITI_ROUND_ALPHA * performance;
+    itiRoundStats.set(semitones, round);
+    const persistent = itiStat(semitones);
+    persistent.long = (1 - ITI_LONG_ALPHA) * persistent.long + ITI_LONG_ALPHA * performance;
+    itiLearning.intervals[String(semitones)] = persistent;
+    saveItiLearning();
+  }
+
+  const absoluteOpenPitches = [40,45,50,55,59,64];
+
+  function intervalSemitones(number, accidental=0) {
+    const simple = ((number - 1) % 7) + 1;
+    const octaves = Math.floor((number - 1) / 7);
+    const majorPerfect = {1:0,2:2,3:4,4:5,5:7,6:9,7:11}[simple] + 12 * octaves;
+    return majorPerfect + accidental;
+  }
+
+  function intervalLabelsForSemitones(semitones) {
+    const labels = [];
+    for (let number=1; number<=13; number++) {
+      for (const accidental of [-1,0,1]) {
+        if (intervalSemitones(number, accidental) === semitones) {
+          labels.push(`${accidental < 0 ? "♭" : accidental > 0 ? "♯" : ""}${number}`);
+        }
+      }
+    }
+    return labels;
+  }
+
+  function preferredIntervalLabel(semitones) {
+    const preferred = {
+      0:"1",1:"♭2",2:"2",3:"♭3",4:"3",5:"4",6:"♭5",7:"5",8:"♭6",9:"6",10:"♭7",11:"7",
+      12:"8",13:"♭9",14:"9",15:"♭10",16:"10",17:"11",18:"♯11",19:"12",20:"♭13",21:"13"
+    };
+    return preferred[semitones] || String(semitones);
+  }
+
+  function fretboardPositions(noteSet) {
+    const naturalPcs = new Set([0,2,4,5,7,9,11]);
+    const out = [];
+    strings.forEach((string, s) => {
+      for (let fret=0; fret<12; fret++) {
+        const pc = pitch(string.open, fret);
+        if (noteSet === "naturals" && !naturalPcs.has(pc)) continue;
+        out.push({s, fret, pc, abs:absoluteOpenPitches[s] + fret});
+      }
+    });
+    return out;
+  }
+
+  function isPlayableIntervalPair(a, b) {
+    if (a.s === b.s && a.fret === b.fret) return false;
+    // Ordinary fretted shapes may span at most five frets. There is deliberately
+    // no string-distance restriction: skipped-string shapes are useful guitar vocabulary.
+    if (a.fret > 0 && b.fret > 0) return Math.abs(a.fret - b.fret) <= 5;
+    // Open strings make wider shapes practical because no finger is needed at fret 0.
+    // Keep the exception moderate rather than admitting arbitrary open-to-high-fret pairs.
+    return Math.max(a.fret, b.fret) <= 7;
+  }
+
+  function choosePlayablePair(pairs) {
+    const same = pairs.filter(p => p.low.s === p.high.s);
+    const cross = pairs.filter(p => p.low.s !== p.high.s);
+    if (!same.length) return cross[Math.floor(Math.random() * cross.length)];
+    if (!cross.length) return same[Math.floor(Math.random() * same.length)];
+    // Same-string questions remain useful, but cross-string interval shapes are the
+    // main focus. Because same-string shapes are only possible for the shorter physical intervals under
+    // the five-fret rule, use a higher conditional rate here; across the full 1–13
+    // interval vocabulary this yields roughly 10–12% same-string questions overall.
+    const pool = Math.random() < 0.35 ? same : cross;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function randomIntervalQuestion() {
+    const positions = fretboardPositions(roundOptions.noteSet);
+    const bySemi = Array.from({length:22}, () => []);
+    for (let a=0; a<positions.length; a++) {
+      for (let b=a+1; b<positions.length; b++) {
+        if (!isPlayableIntervalPair(positions[a], positions[b])) continue;
+        let low = positions[a], high = positions[b];
+        if (low.abs > high.abs) [low, high] = [high, low];
+        const semi = high.abs - low.abs;
+        if (semi < 0 || semi > 21) continue;
+        bySemi[semi].push({low, high, semitones:semi});
+      }
+    }
+    let intervals = bySemi.map((pairs,semitones) => ({pairs,semitones,weight:pairs.length ? itiWeight(semitones) : 0})).filter(x => x.pairs.length);
+    const noRepeat = intervals.filter(x => x.semitones !== lastIntervalSemitones);
+    if (noRepeat.length) intervals = noRepeat;
+    const chosenInterval = weightedChoice(intervals);
+    ageItiIntervals(chosenInterval.semitones);
+    lastIntervalSemitones = chosenInterval.semitones;
+    const pair = choosePlayablePair(chosenInterval.pairs);
+    return {...pair, key:`interval|${pair.semitones}`};
+  }
+
+  function renderIntervalTab(q) {
+    const labels = ["e","B","G","D","A","E"];
+    return labels.map((lab,i) => {
+      const s = 5 - i;
+      const marks = [];
+      if (q.low.s === s) marks.push(`①${q.low.fret}`);
+      if (q.high.s === s) marks.push(`②${q.high.fret}`);
+      return `${lab} |--${marks.length ? marks.join(" · ") : "---"}--|`;
+    }).join("\n");
+  }
+
+  function resetIntervalInput() {
+    itiAnswers.acc = 0;
+    itiAnswers.number = null;
+    accidentalButtons.forEach(b => b.classList.toggle("selected", Number(b.dataset.acc) === 0));
+    intervalNumberButtons.forEach(b => b.classList.remove("selected", "answer-feedback-correct", "answer-feedback-wrong"));
+    submitIntervalBtn.disabled = true;
+    intervalPending.textContent = "♮ —";
+  }
+
   function weightedChoice(items) {
     const total = items.reduce((sum, item) => sum + item.weight, 0);
     let r = Math.random() * total;
@@ -598,15 +807,17 @@ body.quiz-active { overscroll-behavior:none; }
 
   function showQuestion() {
     if (idx >= MAX_QUESTIONS) return finishRound();
-    current = randomQuestion();
+    const isInterval = roundOptions.game === "interval";
+    current = isInterval ? randomIntervalQuestion() : randomQuestion();
     const noteLabel = roundOptions.noteSet === "naturals" ? "Naturals" : "With accidentals";
     const stringLabel = roundOptions.string === "all" ? "All strings" : `${strings[Number(roundOptions.string)].name} string`;
-    progress.textContent = `${noteLabel} · ${stringLabel} · Question ${idx+1}`;
-    target.textContent = roundOptions.game === "find" ? current.note : "Name the note";
-    tab.textContent = renderTab(current);
-    status.textContent = "";
+    progress.textContent = isInterval ? `${noteLabel} · Question ${idx+1}` : `${noteLabel} · ${stringLabel} · Question ${idx+1}`;
+    target.textContent = isInterval ? "Name note ①" : (roundOptions.game === "find" ? current.note : "Name the note");
+    tab.textContent = isInterval ? renderIntervalTab(current) : renderTab(current);
+    status.textContent = isInterval ? "① lower note → ② higher note" : "";
     fretGrid.classList.toggle("hidden", roundOptions.game !== "find");
-    noteGrid.classList.toggle("hidden", roundOptions.game !== "name");
+    noteGrid.classList.toggle("hidden", !(roundOptions.game === "name" || isInterval));
+    intervalPanel.classList.add("hidden");
     clearAnswerFeedback(fretButtons);
     clearAnswerFeedback(noteButtons);
     fretButtons.forEach(b => b.disabled = false);
@@ -614,7 +825,18 @@ body.quiz-active { overscroll-behavior:none; }
       const pc = Number(b.dataset.pc);
       b.disabled = false;
       b.classList.toggle("hidden", roundOptions.noteSet === "naturals" && ![0,2,4,5,7,9,11].includes(pc));
+      if (roundOptions.noteSet === "naturals") {
+        const natural = {0:"C",2:"D",4:"E",5:"F",7:"G",9:"A",11:"B"};
+        if (natural[pc]) b.textContent = natural[pc];
+      } else {
+        b.textContent = answerLabel(pc, "all");
+      }
     });
+    if (isInterval) {
+      itiStage = "note1";
+      itiAnswers = {note1:null,note2:null,acc:0,number:null};
+      resetIntervalInput();
+    }
     startedAt = performance.now();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(tick);
@@ -697,6 +919,94 @@ body.quiz-active { overscroll-behavior:none; }
     setTimeout(showQuestion, feedbackDelay);
   }
 
+  function submitIntervalNote(pc) {
+    if (!current || roundOptions.game !== "interval" || !["note1","note2"].includes(itiStage)) return;
+    noteButtons.forEach(b => b.disabled = true);
+    const targetPos = itiStage === "note1" ? current.low : current.high;
+    const ok = pc === targetPos.pc;
+    const delay = showAnswerFeedback(noteButtons, pc, targetPos.pc, "pc");
+    if (itiStage === "note1") itiAnswers.note1 = {answerPc:pc, correctPc:targetPos.pc, ok};
+    else itiAnswers.note2 = {answerPc:pc, correctPc:targetPos.pc, ok};
+    status.textContent = ok ? "Correct." : `Correct note: ${answerLabel(targetPos.pc, roundOptions.noteSet)}`;
+    setTimeout(() => {
+      clearAnswerFeedback(noteButtons);
+      noteButtons.forEach(b => b.disabled = false);
+      if (itiStage === "note1") {
+        itiStage = "note2";
+        target.textContent = "Name note ②";
+        status.textContent = `① ${answerLabel(current.low.pc, roundOptions.noteSet)} · now identify ②`;
+      } else {
+        itiStage = "interval";
+        target.textContent = "Calculate the interval";
+        status.textContent = `① ${answerLabel(current.low.pc, roundOptions.noteSet)} → ② ${answerLabel(current.high.pc, roundOptions.noteSet)}`;
+        noteGrid.classList.add("hidden");
+        intervalPanel.classList.remove("hidden");
+        resetIntervalInput();
+      }
+    }, delay);
+  }
+
+  function pendingIntervalLabel() {
+    if (itiAnswers.number == null) return `${itiAnswers.acc < 0 ? "♭" : itiAnswers.acc > 0 ? "♯" : "♮"} —`;
+    return `${itiAnswers.acc < 0 ? "♭" : itiAnswers.acc > 0 ? "♯" : ""}${itiAnswers.number}`;
+  }
+
+  accidentalButtons.forEach(btn => btn.addEventListener("click", () => {
+    if (itiStage !== "interval") return;
+    itiAnswers.acc = Number(btn.dataset.acc);
+    accidentalButtons.forEach(b => b.classList.toggle("selected", b === btn));
+    intervalPending.textContent = pendingIntervalLabel();
+  }));
+
+  intervalNumberButtons.forEach(btn => btn.addEventListener("click", () => {
+    if (itiStage !== "interval") return;
+    itiAnswers.number = Number(btn.dataset.number);
+    intervalNumberButtons.forEach(b => b.classList.toggle("selected", b === btn));
+    intervalPending.textContent = pendingIntervalLabel();
+    submitIntervalBtn.disabled = false;
+  }));
+
+  submitIntervalBtn.addEventListener("click", () => {
+    if (itiStage !== "interval" || itiAnswers.number == null || !current) return;
+    submitIntervalBtn.disabled = true;
+    accidentalButtons.forEach(b => b.disabled = true);
+    intervalNumberButtons.forEach(b => b.disabled = true);
+    const ms = performance.now() - startedAt;
+    cancelAnimationFrame(raf);
+    timer.textContent = (ms/1000).toFixed(2) + " s";
+    const guessedSemi = intervalSemitones(itiAnswers.number, itiAnswers.acc);
+    const ok = guessedSemi === current.semitones;
+    updateItiLearning(current.semitones, ok);
+    const chosenLabel = pendingIntervalLabel().replace("♮", "");
+    const equivalents = intervalLabelsForSemitones(current.semitones);
+    const preferred = preferredIntervalLabel(current.semitones);
+    results.push({
+      q:idx+1,
+      low:{...current.low, answerPc:itiAnswers.note1.answerPc, ok:itiAnswers.note1.ok},
+      high:{...current.high, answerPc:itiAnswers.note2.answerPc, ok:itiAnswers.note2.ok},
+      intervalAnswer:chosenLabel,
+      intervalCorrect:preferred,
+      intervalOk:ok,
+      equivalents,
+      ok: itiAnswers.note1.ok && itiAnswers.note2.ok && ok,
+      seconds:+(ms/1000).toFixed(2)
+    });
+    if (ok) {
+      status.textContent = equivalents.length > 1 && chosenLabel !== preferred ? `Correct. Also commonly: ${preferred}` : "Correct interval.";
+    } else {
+      status.textContent = `Correct interval: ${preferred}${equivalents.length > 1 ? ` (${equivalents.join(" / ")})` : ""}`;
+    }
+    const selectedNumber = intervalNumberButtons.find(b => Number(b.dataset.number) === itiAnswers.number);
+    if (selectedNumber) selectedNumber.classList.add(ok ? "answer-feedback-correct" : "answer-feedback-wrong");
+    idx++;
+    setTimeout(() => {
+      accidentalButtons.forEach(b => b.disabled = false);
+      intervalNumberButtons.forEach(b => b.disabled = false);
+      resetIntervalInput();
+      showQuestion();
+    }, ok ? 420 : 850);
+  });
+
   function answerLabel(pc, noteSet = "all") {
     const natural = {0:"C",2:"D",4:"E",5:"F",7:"G",9:"A",11:"B"};
     if (noteSet === "naturals" && natural[pc]) return natural[pc];
@@ -714,7 +1024,9 @@ body.quiz-active { overscroll-behavior:none; }
     const btn = e.target.closest(".note-btn");
     if (!btn || btn.disabled) return;
     e.preventDefault();
-    submitNote(Number(btn.dataset.pc));
+    const pc = Number(btn.dataset.pc);
+    if (roundOptions.game === "interval") submitIntervalNote(pc);
+    else submitNote(pc);
   });
 
   function finishRound() {
@@ -723,18 +1035,20 @@ body.quiz-active { overscroll-behavior:none; }
     resultsCard.classList.remove("hidden");
     document.body.classList.remove("quiz-active");
 
-    const correctCount = results.filter(r=>r.ok).length;
+    const isInterval = roundOptions.game === "interval";
+    const correctCount = results.filter(r=> isInterval ? r.intervalOk : r.ok).length;
     const isName = roundOptions.game === "name";
-    colPrompt.textContent = isName ? "Fret" : "Note";
-    colAnswer.textContent = isName ? "Your note" : "Your fret";
-    colCorrect.textContent = isName ? "Correct" : "Correct";
+    colString.textContent = isInterval ? "Low" : "String";
+    colPrompt.textContent = isInterval ? "High" : (isName ? "Fret" : "Note");
+    colAnswer.textContent = isInterval ? "Interval" : (isName ? "Your note" : "Your fret");
+    colCorrect.textContent = "Correct";
 
     if (results.length === 0) {
       score.textContent = "0/0";
       summary.textContent = "no completed answers";
       resultsBody.innerHTML = "";
       exportBox.value = [
-        isName ? "Name the Note results" : "Find the Fret! results",
+        isInterval ? "Investigate the Interval results" : (isName ? "Name the Note results" : "Find the Fret! results"),
         `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
         `Strings: ${roundOptions.string === "all" ? "All strings" : strings[Number(roundOptions.string)].name}`,
         "Score: 0/0",
@@ -749,7 +1063,23 @@ body.quiz-active { overscroll-behavior:none; }
     const capReached = results.length >= MAX_QUESTIONS;
     summary.textContent = `${capReached ? "limit reached • " : ""}avg ${avg.toFixed(2)} s • fastest ${fastest.toFixed(2)} s`;
 
-    if (isName) {
+    if (isInterval) {
+      resultsBody.innerHTML = results.map(r => {
+        const low = `${strings[r.low.s].name}${r.low.fret}: ${answerLabel(r.low.answerPc, roundOptions.noteSet)}${r.low.ok ? "✓" : "✕"}`;
+        const high = `${strings[r.high.s].name}${r.high.fret}: ${answerLabel(r.high.answerPc, roundOptions.noteSet)}${r.high.ok ? "✓" : "✕"}`;
+        return `<tr><td>${r.q}</td><td>${low}</td><td>${high}</td><td>${r.intervalAnswer}</td><td>${r.intervalCorrect}</td><td>${r.seconds.toFixed(2)} s ${r.intervalOk ? "✓" : "✕"}</td></tr>`;
+      }).join("");
+      exportBox.value = [
+        "Investigate the Interval results",
+        `Notes: ${roundOptions.noteSet === "naturals" ? "Naturals only" : "With accidentals (all notes)"}`,
+        `Score (interval): ${correctCount}/${results.length}`,
+        `Average total question time: ${avg.toFixed(2)} s`,
+        "",
+        "| # | Low note | High note | Interval answer | Correct interval | Time (s) | Result |",
+        "|---:|:---|:---|:---:|:---:|---:|:---:|",
+        ...results.map(r => `| ${r.q} | ${strings[r.low.s].name}${r.low.fret}: ${answerLabel(r.low.answerPc, roundOptions.noteSet)} ${r.low.ok ? "✓" : "✕"} | ${strings[r.high.s].name}${r.high.fret}: ${answerLabel(r.high.answerPc, roundOptions.noteSet)} ${r.high.ok ? "✓" : "✕"} | ${r.intervalAnswer} | ${r.intervalCorrect} | ${r.seconds.toFixed(2)} | ${r.intervalOk ? "✓" : "✕"} |`)
+      ].join("\n");
+    } else if (isName) {
       resultsBody.innerHTML = results.map(r =>
         `<tr><td>${r.q}</td><td>${r.string}</td><td>${r.fret}</td><td>${answerLabel(r.answerPc, roundOptions.noteSet)}</td><td>${answerLabel(r.correctPc, roundOptions.noteSet)}</td><td>${r.seconds.toFixed(2)} s ${r.ok ? "✓" : "✕"}</td></tr>`
       ).join("");
@@ -784,9 +1114,9 @@ body.quiz-active { overscroll-behavior:none; }
 
 
   function beginRound() {
-    roundOptions = { game:selectedGame, noteSet:noteSetSelect.value, string:stringSelect.value };
+    roundOptions = { game:selectedGame, noteSet:noteSetSelect.value, string:selectedGame === "interval" ? "all" : stringSelect.value };
     setupStatus.textContent = "";
-    idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null;
+    idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null; itiRoundStats = new Map(); lastIntervalSemitones = null;
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
     resultsCard.classList.add("hidden");
@@ -797,7 +1127,7 @@ body.quiz-active { overscroll-behavior:none; }
 
   function restartRound() {
     cancelAnimationFrame(raf);
-    idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null;
+    idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null; itiRoundStats = new Map(); lastIntervalSemitones = null;
     status.textContent = "";
     showQuestion();
   }
@@ -823,12 +1153,18 @@ body.quiz-active { overscroll-behavior:none; }
       scaleSection.classList.remove("hidden");
     } else {
       const isName = game === "name";
-      viewSubtitle.textContent = isName ? "Name the note • timed automatically • E A D G B e" : "Find the fret • timed automatically • E A D G B e";
-      setupTitle.textContent = isName ? "Name the Note" : "Find the Fret!";
-      setupHelp.textContent = isName
-        ? "See a fret on the TAB and identify its note. Choose the note set and, if you want, practise one string only."
-        : "Choose the note set and, if you want, practise one string only.";
-      startRoundBtn.textContent = isName ? "Start Name the Note" : "Start round";
+      const isInterval = game === "interval";
+      viewSubtitle.textContent = isInterval
+        ? "Two notes • identify low to high • calculate the interval"
+        : (isName ? "Name the note • timed automatically • E A D G B e" : "Find the fret • timed automatically • E A D G B e");
+      setupTitle.textContent = isInterval ? "Investigate the Interval" : (isName ? "Name the Note" : "Find the Fret!");
+      setupHelp.textContent = isInterval
+        ? "Identify the lower note, then the higher note, then submit the interval. Interval mistakes are reinforced; response speed is not."
+        : (isName
+          ? "See a fret on the TAB and identify its note. Choose the note set and, if you want, practise one string only."
+          : "Choose the note set and, if you want, practise one string only.");
+      stringSetupWrap.classList.toggle("hidden", isInterval);
+      startRoundBtn.textContent = isInterval ? "Start Investigate the Interval" : (isName ? "Start Name the Note" : "Start round");
       setup.classList.remove("hidden");
     }
     closeMenu();
