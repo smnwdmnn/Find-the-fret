@@ -80,6 +80,7 @@ body.quiz-active { overscroll-behavior:none; }
     .interval-pending { text-align:center; min-height:18px; font-size:15px; }
     .iti-note-summary { font-size:13px; line-height:1.45; }
     .stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:10px; }
+    .sort-btn { appearance:none; border:0; background:transparent; padding:0; font:inherit; font-weight:700; color:inherit; cursor:pointer; }
     .stat-box { border:1px solid var(--line); border-radius:10px; padding:9px; background:var(--bg); }
     .stat-value { font-size:20px; font-weight:750; margin-top:2px; }
     .heatmap-wrap { overflow-x:auto; margin-top:10px; }
@@ -531,6 +532,32 @@ body.quiz-active { overscroll-behavior:none; }
     return `<div class="section-title" style="font-size:15px;margin-top:12px">${title}</div><table class="detail-table"><thead><tr><th></th><th>n</th><th>Acc.</th><th>Avg.</th><th>Median</th></tr></thead><tbody>${data.map(d=>`<tr><td>${d.label}</td><td>${d.n}</td><td>${d.acc.toFixed(0)}%</td><td>${d.avg.toFixed(2)} s</td><td>${d.med.toFixed(2)} s</td></tr>`).join("")}</tbody></table>`;
   }
 
+  const statsSort = {
+    string:{field:"avg",dir:"desc"},
+    fret:{field:"avg",dir:"desc"}
+  };
+
+  function sortedStatsData(data, sortKey) {
+    const {field,dir}=statsSort[sortKey];
+    const mult=dir==="asc"?1:-1;
+    return [...data].sort((a,b)=>{
+      const av = field==="label" ? String(a.label) : Number(a[field]);
+      const bv = field==="label" ? String(b.label) : Number(b[field]);
+      if (field==="label") return String(av).localeCompare(String(bv),undefined,{numeric:true})*mult;
+      if (av===bv) return String(a.label).localeCompare(String(b.label),undefined,{numeric:true});
+      return (av-bv)*mult;
+    });
+  }
+
+  function sortableDetailTable(title, data, sortKey) {
+    if (!data.length) return "";
+    const s=statsSort[sortKey];
+    const arrow=(field)=>s.field===field ? (s.dir==="desc"?" ↓":" ↑") : "";
+    const rows=sortedStatsData(data,sortKey);
+    const h=(label,field)=>`<button type="button" class="sort-btn" data-stats-sort="${sortKey}" data-sort-field="${field}">${label}${arrow(field)}</button>`;
+    return `<div class="section-title" style="font-size:15px;margin-top:12px">${title}</div><table class="detail-table"><thead><tr><th>${h("", "label")}</th><th>${h("n","n")}</th><th>${h("Acc.","acc")}</th><th>${h("Avg.","avg")}</th><th>${h("Median","med")}</th></tr></thead><tbody>${rows.map(d=>`<tr><td>${d.label}</td><td>${d.n}</td><td>${d.acc.toFixed(0)}%</td><td>${d.avg.toFixed(2)} s</td><td>${d.med.toFixed(2)} s</td></tr>`).join("")}</tbody></table>`;
+  }
+
   function roundRowsForStats(game, roundResults) {
     if (game === "find") return roundResults.map(r=>({game, stringIndex:strings.findIndex(s=>s.name===r.string), fret:r.correct, seconds:r.seconds, correct:r.ok, noteSet:roundOptions.noteSet}));
     if (game === "name") return roundResults.map(r=>({game, stringIndex:strings.findIndex(s=>s.name===r.string), fret:r.fret, seconds:r.seconds, correct:r.ok, noteSet:roundOptions.noteSet}));
@@ -567,7 +594,7 @@ body.quiz-active { overscroll-behavior:none; }
     }
     const byString=aggregateTable(rows,r=>r.stringIndex,k=>strings[Number(k)].name);
     const byFret=aggregateTable(rows,r=>r.fret,k=>String(k));
-    statsContent.innerHTML=statsBoxes(rows)+mappingHeatmap(rows,"All-time heat map")+detailTable("By string",byString)+detailTable("By fret",byFret);
+    statsContent.innerHTML=statsBoxes(rows)+mappingHeatmap(rows,"All-time heat map")+sortableDetailTable("By string",byString,"string")+sortableDetailTable("By fret",byFret,"fret");
   }
 
   function pitch(open, fret) { return (open + fret) % 12; }
@@ -1428,6 +1455,19 @@ body.quiz-active { overscroll-behavior:none; }
   randomScaleBtn.addEventListener("click", randomScale);
   statsGameSelect.addEventListener("change", renderLongTermStats);
   statsNoteSetSelect.addEventListener("change", renderLongTermStats);
+  statsContent.addEventListener("click", e => {
+    const btn=e.target.closest("[data-stats-sort]");
+    if(!btn) return;
+    const key=btn.dataset.statsSort;
+    const field=btn.dataset.sortField;
+    if(!statsSort[key]) return;
+    if(statsSort[key].field===field) statsSort[key].dir=statsSort[key].dir==="desc"?"asc":"desc";
+    else {
+      statsSort[key].field=field;
+      statsSort[key].dir=(field==="label")?"asc":"desc";
+    }
+    renderLongTermStats();
+  });
   allModesBtn.addEventListener("click", () => {
     modeChecks.forEach(c => c.checked = true);
     scaleStatus.textContent = "";
