@@ -484,14 +484,16 @@ body.quiz-active { overscroll-behavior:none; }
     if (!rows.length) return "";
     const map=new Map();
     rows.forEach(r=>{
-      const key=`${r.stringFamily}|${r.fret}`;
+      if(!Number.isInteger(r.stringIndex) || !Number.isInteger(r.fret) || !Number.isFinite(r.seconds)) return;
+      const key=`${r.stringIndex}|${r.fret}`;
       let x=map.get(key);
       if(!x){x={sum:0,n:0,mistakes:0};map.set(key,x);}
-      x.sum+=r.time;
+      x.sum+=r.seconds;
       x.n++;
       if(!r.correct) x.mistakes++;
     });
 
+    if(!map.size) return `<div class="muted">No fretboard data for this selection.</div>`;
     const avgs=[...map.values()].map(x=>x.sum/x.n);
     const min=Math.min(...avgs), max=Math.max(...avgs);
     const cellBg=(avg)=>{
@@ -503,20 +505,24 @@ body.quiz-active { overscroll-behavior:none; }
     };
 
     const noteNames=["C","C♯/D♭","D","D♯/E♭","E","F","F♯/G♭","G","G♯/A♭","A","A♯/B♭","B"];
-    const openPc={E:4,e:4,A:9,D:2,G:7,B:11};
-    const familyForLabel=(label)=>label==="E"||label==="e"?0:({A:1,D:2,G:3,B:4}[label]??0);
+    const stringRows=[
+      {index:5,label:"e",openPc:4},
+      {index:4,label:"B",openPc:11},
+      {index:3,label:"G",openPc:7},
+      {index:2,label:"D",openPc:2},
+      {index:1,label:"A",openPc:9},
+      {index:0,label:"E",openPc:4}
+    ];
 
     let out=`<div class="section-title">${title}</div><div class="heatmap-wrap"><table class="heatmap"><thead><tr><th></th>`;
     for(let f=0;f<=11;f++) out+=`<th>${f}</th>`;
     out+=`</tr></thead><tbody>`;
 
-    for(const s of ["e","B","G","D","A","E"]){
-      out+=`<tr><th>${s}</th>`;
-      const family=familyForLabel(s);
+    for(const s of stringRows){
+      out+=`<tr><th>${s.label}</th>`;
       for(let fret=0;fret<=11;fret++){
-        const key=`${family}|${fret}`;
-        const x=map.get(key);
-        const note=noteNames[(openPc[s]+fret)%12];
+        const x=map.get(`${s.index}|${fret}`);
+        const note=noteNames[(s.openPc+fret)%12];
         if(!x){
           out+=`<td class="empty"><div><strong>${note}</strong></div><div>—</div><div>—</div></td>`;
         } else {
