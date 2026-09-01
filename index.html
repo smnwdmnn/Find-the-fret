@@ -480,32 +480,54 @@ body.quiz-active { overscroll-behavior:none; }
     return `hsl(${hue} 68% 78%)`;
   }
 
-  function mappingHeatmap(rows, title="Fretboard heat map") {
-    const by = new Map();
-    rows.forEach(r => {
-      if (!Number.isInteger(r.stringIndex) || !Number.isInteger(r.fret)) return;
-      const key = `${r.stringIndex}|${r.fret}`;
-      if (!by.has(key)) by.set(key, []);
-      by.get(key).push(r.seconds);
+  function mappingHeatmap(rows,title) {
+    if (!rows.length) return "";
+    const map=new Map();
+    rows.forEach(r=>{
+      const key=`${r.stringFamily}|${r.fret}`;
+      let x=map.get(key);
+      if(!x){x={sum:0,n:0,mistakes:0};map.set(key,x);}
+      x.sum+=r.time;
+      x.n++;
+      if(!r.correct) x.mistakes++;
     });
-    const avgs = [...by.values()].map(v=>v.reduce((a,b)=>a+b,0)/v.length);
-    if (!avgs.length) return `<div class="muted">No fretboard data for this selection.</div>`;
-    const min = Math.min(...avgs), max = Math.max(...avgs);
-    let html = `<div class="section-title" style="font-size:15px">${title}</div><div class="heatmap-wrap"><table class="heatmap"><thead><tr><th></th>${Array.from({length:12},(_,f)=>`<th>${f}</th>`).join("")}</tr></thead><tbody>`;
-    for (let s=5; s>=0; s--) {
-      html += `<tr><th>${strings[s].name}</th>`;
-      for (let f=0; f<12; f++) {
-        const vals = by.get(`${s}|${f}`);
-        if (!vals) html += `<td class="empty">—</td>`;
-        else {
-          const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
-          html += `<td style="background:${heatColor(avg,min,max)}" title="${strings[s].name}${f}: ${avg.toFixed(2)} s, n=${vals.length}"><strong>${avg.toFixed(1)}</strong><br><span>n${vals.length}</span></td>`;
+
+    const avgs=[...map.values()].map(x=>x.sum/x.n);
+    const min=Math.min(...avgs), max=Math.max(...avgs);
+    const cellBg=(avg)=>{
+      if(max<=min) return "hsl(120 55% 85%)";
+      const t=(avg-min)/(max-min);
+      const hue=120*(1-t);
+      const light=86-26*t;
+      return `hsl(${hue} 58% ${light}%)`;
+    };
+
+    const noteNames=["C","C♯/D♭","D","D♯/E♭","E","F","F♯/G♭","G","G♯/A♭","A","A♯/B♭","B"];
+    const openPc={E:4,e:4,A:9,D:2,G:7,B:11};
+    const familyForLabel=(label)=>label==="E"||label==="e"?0:({A:1,D:2,G:3,B:4}[label]??0);
+
+    let out=`<div class="section-title">${title}</div><div class="heatmap-wrap"><table class="heatmap"><thead><tr><th></th>`;
+    for(let f=0;f<=11;f++) out+=`<th>${f}</th>`;
+    out+=`</tr></thead><tbody>`;
+
+    for(const s of ["e","B","G","D","A","E"]){
+      out+=`<tr><th>${s}</th>`;
+      const family=familyForLabel(s);
+      for(let fret=0;fret<=11;fret++){
+        const key=`${family}|${fret}`;
+        const x=map.get(key);
+        const note=noteNames[(openPc[s]+fret)%12];
+        if(!x){
+          out+=`<td class="empty"><div><strong>${note}</strong></div><div>—</div><div>—</div></td>`;
+        } else {
+          const avg=x.sum/x.n;
+          out+=`<td style="background:${cellBg(avg)}"><div><strong>${note}</strong></div><div>${avg.toFixed(2)} s</div><div>${x.mistakes} ✕</div></td>`;
         }
       }
-      html += `</tr>`;
+      out+=`</tr>`;
     }
-    html += `</tbody></table></div><div class="heatmap-legend"><span>faster ${min.toFixed(2)} s</span><span>slower ${max.toFixed(2)} s</span></div>`;
-    return html;
+    out+=`</tbody></table></div>`;
+    return out;
   }
 
   function aggregateTable(rows, keyFn, labelFn) {
