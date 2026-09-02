@@ -135,6 +135,13 @@ body.quiz-active { overscroll-behavior:none; }
       <option value="all" selected>With accidentals (all notes)</option>
     </select>
 
+    <label class="muted" for="trackingSelect" style="display:block;margin-top:10px">Round mode</label>
+    <select id="trackingSelect" style="width:100%;margin-top:6px">
+      <option value="tracked" selected>Timed + stats</option>
+      <option value="practice">Practice — no timing or stats</option>
+    </select>
+    <div class="muted" style="margin-top:5px">Practice mode does not change long-term stats, EWMA difficulty, baseline, or aging.</div>
+
     <div id="stringSetupWrap">
     <label class="muted" for="stringSelect" style="display:block;margin-top:10px">String</label>
     <select id="stringSelect" style="width:100%;margin-top:6px">
@@ -340,6 +347,7 @@ body.quiz-active { overscroll-behavior:none; }
   const resultsCard = document.getElementById("resultsCard");
   const noteSetSelect = document.getElementById("noteSetSelect");
   const stringSelect = document.getElementById("stringSelect");
+  const trackingSelect = document.getElementById("trackingSelect");
   const stringSetupWrap = document.getElementById("stringSetupWrap");
   const startRoundBtn = document.getElementById("startRoundBtn");
   const setupStatus = document.getElementById("setupStatus");
@@ -903,7 +911,7 @@ body.quiz-active { overscroll-behavior:none; }
     const noRepeat = intervals.filter(x => x.semitones !== lastIntervalSemitones);
     if (noRepeat.length) intervals = noRepeat;
     const chosenInterval = weightedChoice(intervals);
-    ageItiIntervals(chosenInterval.semitones);
+    if (roundOptions.tracked) ageItiIntervals(chosenInterval.semitones);
     lastIntervalSemitones = chosenInterval.semitones;
     const pair = choosePlayablePair(chosenInterval.pairs);
     return {...pair, key:`interval|${pair.semitones}`};
@@ -974,7 +982,7 @@ body.quiz-active { overscroll-behavior:none; }
     const pool = eligible.length ? eligible : candidates;
 
     const chosen = weightedChoice(pool);
-    advanceEligibleAges(candidates.map(c => c.key), chosen.key);
+    if (roundOptions.tracked) advanceEligibleAges(candidates.map(c => c.key), chosen.key);
     const s = chosen.family[Math.floor(Math.random() * chosen.family.length)];
     const q = {
       s,
@@ -1089,9 +1097,11 @@ body.quiz-active { overscroll-behavior:none; }
       itiAnswers = {note1:null,note2:null,acc:0,number:null};
       resetIntervalInput();
     }
+    timer.classList.toggle("hidden", !roundOptions.tracked);
     startedAt = performance.now();
     cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(tick);
+    if (roundOptions.tracked) raf = requestAnimationFrame(tick);
+    else timer.textContent = "";
   }
 
 
@@ -1124,7 +1134,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     const ok = n === current.fret;
     const seconds = ms / 1000;
-    updateLearning(current.key, seconds, ok, current.fret);
+    if (roundOptions.tracked) updateLearning(current.key, seconds, ok, current.fret);
 
     results.push({
       q: idx+1,
@@ -1135,7 +1145,7 @@ body.quiz-active { overscroll-behavior:none; }
       ok,
       seconds: +seconds.toFixed(2)
     });
-    persistAttempt({game:"find", noteSet:roundOptions.noteSet, stringIndex:current.s, string:strings[current.s].name, fret:current.fret, targetPc:current.pc, targetNote:current.note, answer:n, correct:ok, seconds:+seconds.toFixed(2), timestamp:Date.now()});
+    if (roundOptions.tracked) persistAttempt({game:"find", noteSet:roundOptions.noteSet, stringIndex:current.s, string:strings[current.s].name, fret:current.fret, targetPc:current.pc, targetNote:current.note, answer:n, correct:ok, seconds:+seconds.toFixed(2), timestamp:Date.now()});
 
     status.textContent = ok ? "Correct." : `Correct fret: ${current.fret}`;
     const feedbackDelay = showAnswerFeedback(fretButtons, n, current.fret, "fret");
@@ -1154,7 +1164,7 @@ body.quiz-active { overscroll-behavior:none; }
 
     const ok = pc === current.pc;
     const seconds = ms / 1000;
-    updateLearning(current.key, seconds, ok, current.fret);
+    if (roundOptions.tracked) updateLearning(current.key, seconds, ok, current.fret);
 
     results.push({
       q: idx+1,
@@ -1165,7 +1175,7 @@ body.quiz-active { overscroll-behavior:none; }
       ok,
       seconds: +seconds.toFixed(2)
     });
-    persistAttempt({game:"name", noteSet:roundOptions.noteSet, stringIndex:current.s, string:strings[current.s].name, fret:current.fret, answerPc:pc, targetPc:current.pc, correct:ok, seconds:+seconds.toFixed(2), timestamp:Date.now()});
+    if (roundOptions.tracked) persistAttempt({game:"name", noteSet:roundOptions.noteSet, stringIndex:current.s, string:strings[current.s].name, fret:current.fret, answerPc:pc, targetPc:current.pc, correct:ok, seconds:+seconds.toFixed(2), timestamp:Date.now()});
 
     status.textContent = ok ? "Correct." : `Correct note: ${answerLabel(current.pc, roundOptions.noteSet)}`;
     const feedbackDelay = showAnswerFeedback(noteButtons, pc, current.pc, "pc");
@@ -1230,7 +1240,7 @@ body.quiz-active { overscroll-behavior:none; }
     timer.textContent = (ms/1000).toFixed(2) + " s";
     const guessedSemi = intervalSemitones(itiAnswers.number, itiAnswers.acc);
     const ok = guessedSemi === current.semitones;
-    updateItiLearning(current.semitones, ok);
+    if (roundOptions.tracked) updateItiLearning(current.semitones, ok);
     const chosenLabel = pendingIntervalLabel().replace("♮", "");
     const equivalents = intervalLabelsForSemitones(current.semitones);
     const preferred = preferredIntervalLabel(current.semitones);
@@ -1245,7 +1255,7 @@ body.quiz-active { overscroll-behavior:none; }
       ok: itiAnswers.note1.ok && itiAnswers.note2.ok && ok,
       seconds:+(ms/1000).toFixed(2)
     });
-    persistAttempt({game:"interval", noteSet:roundOptions.noteSet, low:{s:current.low.s,fret:current.low.fret,pc:current.low.pc}, high:{s:current.high.s,fret:current.high.fret,pc:current.high.pc}, intervalAnswer:chosenLabel, intervalCorrect:preferred, semitones:current.semitones, note1Correct:itiAnswers.note1.ok, note2Correct:itiAnswers.note2.ok, correct:ok, seconds:+(ms/1000).toFixed(2), timestamp:Date.now()});
+    if (roundOptions.tracked) persistAttempt({game:"interval", noteSet:roundOptions.noteSet, low:{s:current.low.s,fret:current.low.fret,pc:current.low.pc}, high:{s:current.high.s,fret:current.high.fret,pc:current.high.pc}, intervalAnswer:chosenLabel, intervalCorrect:preferred, semitones:current.semitones, note1Correct:itiAnswers.note1.ok, note2Correct:itiAnswers.note2.ok, correct:ok, seconds:+(ms/1000).toFixed(2), timestamp:Date.now()});
     if (ok) {
       status.textContent = equivalents.length > 1 && chosenLabel !== preferred ? `Correct. Also commonly: ${preferred}` : "Correct interval.";
     } else {
@@ -1297,6 +1307,17 @@ body.quiz-active { overscroll-behavior:none; }
     colPrompt.textContent = isInterval ? "High" : (isName ? "Fret" : "Note");
     colAnswer.textContent = isInterval ? "Interval" : (isName ? "Your note" : "Your fret");
     colCorrect.textContent = "Correct";
+
+    if (!roundOptions.tracked) {
+      score.textContent = `${results.length}`;
+      summary.textContent = results.length === 1 ? "practice question" : "practice questions";
+      roundDiagnostics.innerHTML = `<div class="muted">Practice mode — no timing, statistics, history, or learning state was recorded.</div>`;
+      resultsBody.innerHTML = "";
+      rawDetails.open = false;
+      rawDetails.classList.add("hidden");
+      return;
+    }
+    rawDetails.classList.remove("hidden");
 
     if (results.length === 0) {
       score.textContent = "0/0";
@@ -1373,13 +1394,14 @@ body.quiz-active { overscroll-behavior:none; }
 
 
   function beginRound() {
-    roundOptions = { game:selectedGame, noteSet:noteSetSelect.value, string:selectedGame === "interval" ? "all" : stringSelect.value };
+    roundOptions = { game:selectedGame, noteSet:noteSetSelect.value, string:selectedGame === "interval" ? "all" : stringSelect.value, tracked:trackingSelect.value === "tracked" };
     setupStatus.textContent = "";
     idx = 0; results = []; last = null; comboStats = new Map(); roundBaseline = null; itiRoundStats = new Map(); lastIntervalSemitones = null;
     setup.classList.add("hidden");
     scaleSection.classList.add("hidden");
     statsSection.classList.add("hidden");
     resultsCard.classList.add("hidden");
+    rawDetails.classList.remove("hidden");
     quiz.classList.remove("hidden");
     document.body.classList.add("quiz-active");
     showQuestion();
