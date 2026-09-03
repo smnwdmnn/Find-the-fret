@@ -1,13 +1,13 @@
 {
-  "name": "Fretboard Speedround",
-  "short_name": "Fret Speed",
+  "name": "Find the Fret!",
+  "short_name": "Find the Fret!",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#111111",
   "theme_color": "#111111",
   "icons": [
     {
-      "src": "icon.svg?v=11",
+      "src": "icon.svg?v=13",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
