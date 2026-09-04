@@ -105,6 +105,17 @@ body.quiz-active { overscroll-behavior:none; }
     .detail-table th,.detail-table td { padding:5px 4px; border-bottom:1px solid var(--line); text-align:left; }
     .interval-stat-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:10px; }
     .interval-stat { border:1px solid var(--line); border-radius:8px; padding:7px; text-align:center; font-size:11px; }
+    .iti-review-wrap { overflow-x:auto; margin-top:8px; }
+    .iti-review-table { width:100%; border-collapse:collapse; font-size:12px; min-width:620px; }
+    .iti-review-table th, .iti-review-table td { padding:7px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    .iti-review-table th { font-size:11px; color:var(--muted); white-space:nowrap; }
+    .iti-review-table .ok { font-weight:700; }
+    .iti-review-table .bad { font-weight:700; }
+    .iti-performance-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+    .iti-performance-table th, .iti-performance-table td { padding:7px 6px; border-bottom:1px solid var(--line); text-align:right; }
+    .iti-performance-table th:first-child, .iti-performance-table td:first-child { text-align:left; }
+    .iti-performance-table th { color:var(--muted); font-size:11px; }
+
     @media (max-width:420px) {
       main { padding-left:10px; padding-right:10px; }
       .quiz-layout { grid-template-columns:minmax(0,0.9fr) minmax(172px,1.1fr); gap:8px; }
@@ -120,7 +131,7 @@ body.quiz-active { overscroll-behavior:none; }
 <body>
 <main>
   <div class="app-header">
-    <div class="title-wrap"><h1>Find the Fret!</h1><span class="version-badge" id="versionBadge">v41</span></div>
+    <div class="title-wrap"><h1>Find the Fret!</h1><span class="version-badge" id="versionBadge">v42</span></div>
     <div class="menu-wrap">
       <button type="button" id="menuBtn" class="secondary menu-btn" aria-expanded="false" aria-controls="gameMenu" aria-label="Choose game">☰</button>
       <div id="gameMenu" class="game-menu hidden" role="menu">
@@ -703,13 +714,94 @@ body.quiz-active { overscroll-behavior:none; }
     return [];
   }
 
+  function itiPositionLabel(pos) {
+    return `${strings[pos.s].name}${pos.fret}`;
+  }
+
+  function itiCorrectNoteLabel(pos, noteSet = roundOptions.noteSet) {
+    return answerLabel(pos.pc, noteSet);
+  }
+
+  function itiRoundReviewTable(roundResults) {
+    if (!roundResults.length) return "";
+    const rows = roundResults.map(r => {
+      const lowYou = answerLabel(r.low.answerPc, roundOptions.noteSet);
+      const highYou = answerLabel(r.high.answerPc, roundOptions.noteSet);
+      const lowCorrect = itiCorrectNoteLabel(r.low);
+      const highCorrect = itiCorrectNoteLabel(r.high);
+      const intervalCell = r.intervalOk
+        ? `<span class="ok">${r.intervalCorrect} ✓</span>`
+        : `<span class="bad">${r.intervalAnswer} ✕</span><br><span class="muted">→ ${r.intervalCorrect}</span>`;
+      return `<tr>
+        <td>${r.q}</td>
+        <td><strong>${itiPositionLabel(r.low)}</strong><br>${lowCorrect}<br><span class="muted">you: ${lowYou} ${r.low.ok ? "✓" : "✕"}</span></td>
+        <td><strong>${itiPositionLabel(r.high)}</strong><br>${highCorrect}<br><span class="muted">you: ${highYou} ${r.high.ok ? "✓" : "✕"}</span></td>
+        <td>${intervalCell}</td>
+      </tr>`;
+    }).join("");
+    return `<div class="section-title" style="font-size:15px;margin-top:12px">Question review</div>
+      <div class="muted">Correct notes are shown with their corresponding interval. Your note answers are shown underneath.</div>
+      <div class="iti-review-wrap"><table class="iti-review-table">
+        <thead><tr><th>#</th><th>Lower note</th><th>Higher note</th><th>Interval</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  }
+
+  function itiSummaryBoxes(rows) {
+    if (!rows.length) return "";
+    const pct = fn => rows.filter(fn).length / rows.length * 100;
+    const intervalAcc = pct(r => r.correct);
+    const note1Acc = pct(r => r.note1Correct);
+    const note2Acc = pct(r => r.note2Correct);
+    const bothNotesAcc = pct(r => r.note1Correct && r.note2Correct);
+    return `<div class="stats-grid">
+      <div class="stat-box"><div class="muted">Attempts</div><div class="stat-value">${rows.length}</div></div>
+      <div class="stat-box"><div class="muted">Interval accuracy</div><div class="stat-value">${intervalAcc.toFixed(1)}%</div></div>
+      <div class="stat-box"><div class="muted">Lower-note accuracy</div><div class="stat-value">${note1Acc.toFixed(1)}%</div></div>
+      <div class="stat-box"><div class="muted">Higher-note accuracy</div><div class="stat-value">${note2Acc.toFixed(1)}%</div></div>
+      <div class="stat-box"><div class="muted">Both notes correct</div><div class="stat-value">${bothNotesAcc.toFixed(1)}%</div></div>
+    </div>`;
+  }
+
+  function itiPerformanceTable(rows) {
+    const groups = new Map();
+    rows.forEach(r => {
+      const semi = Number.isFinite(r.semitones) ? r.semitones : null;
+      if (semi == null) return;
+      if (!groups.has(semi)) groups.set(semi, []);
+      groups.get(semi).push(r);
+    });
+    if (!groups.size) return "";
+    const body = [...groups.entries()]
+      .sort((a,b) => a[0]-b[0])
+      .map(([semi, group]) => {
+        const intervalAcc = group.filter(r=>r.correct).length/group.length*100;
+        const noteAcc = group.filter(r=>r.note1Correct && r.note2Correct).length/group.length*100;
+        const wrong = group.filter(r=>!r.correct).map(r=>r.intervalAnswer).filter(Boolean);
+        const counts = new Map();
+        wrong.forEach(x=>counts.set(x,(counts.get(x)||0)+1));
+        const commonWrong = [...counts.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] || "—";
+        return `<tr><td><strong>${preferredIntervalLabel(semi)}</strong><br><span class="muted">${semi} semitones</span></td><td>${group.length}</td><td>${intervalAcc.toFixed(0)}%</td><td>${noteAcc.toFixed(0)}%</td><td>${commonWrong}</td></tr>`;
+      }).join("");
+    return `<div class="section-title" style="font-size:15px;margin-top:14px">By interval</div>
+      <table class="iti-performance-table">
+        <thead><tr><th>Interval</th><th>n</th><th>Interval</th><th>Both notes</th><th>Most common wrong</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+  }
+
   function renderRoundDiagnostics() {
     if (!results.length) { roundDiagnostics.innerHTML=""; return; }
     if (roundOptions.game === "interval") {
-      const intervalRows = results.map(r=>({label:r.intervalCorrect, correct:r.intervalOk, seconds:r.seconds}));
-      const groups = new Map();
-      intervalRows.forEach(r=>{if(!groups.has(r.label))groups.set(r.label,[]);groups.get(r.label).push(r)});
-      roundDiagnostics.innerHTML = `<div class="section-title" style="font-size:15px">Round interval detail</div><div class="interval-stat-grid">${[...groups.entries()].map(([label,v])=>`<div class="interval-stat"><strong>${label}</strong><br>${v.filter(x=>x.correct).length}/${v.length}</div>`).join("")}</div>`;
+      const historyLike = results.map(r => ({
+        semitones:r.semitones,
+        intervalCorrect:r.intervalCorrect,
+        intervalAnswer:r.intervalAnswer,
+        correct:r.intervalOk,
+        note1Correct:r.low.ok,
+        note2Correct:r.high.ok
+      }));
+      roundDiagnostics.innerHTML = itiSummaryBoxes(historyLike) + itiRoundReviewTable(results) + itiPerformanceTable(historyLike);
       return;
     }
     const rows=roundRowsForStats(roundOptions.game, results);
@@ -733,9 +825,10 @@ body.quiz-active { overscroll-behavior:none; }
     });
     if (!rows.length) { statsContent.innerHTML=`<div class="muted">No persistent attempts yet for this selection. History begins with v25.</div>`; return; }
     if (game === "interval") {
-      const acc=rows.filter(r=>r.correct).length/rows.length*100;
-      const groups=new Map(); rows.forEach(r=>{const k=r.intervalCorrect||"?";if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r)});
-      statsContent.innerHTML=`<div class="stats-grid"><div class="stat-box"><div class="muted">Attempts</div><div class="stat-value">${rows.length}</div></div><div class="stat-box"><div class="muted">Interval accuracy</div><div class="stat-value">${acc.toFixed(1)}%</div></div></div><div class="interval-stat-grid">${[...groups.entries()].map(([k,v])=>`<div class="interval-stat"><strong>${k}</strong><br>${v.filter(x=>x.correct).length}/${v.length}</div>`).join("")}</div>`;
+      statsContent.innerHTML =
+        itiSummaryBoxes(rows) +
+        itiPerformanceTable(rows) +
+        `<div class="muted" style="margin-top:10px">ItI reinforcement is based on interval-answer accuracy. Note-identification accuracy is shown separately so you can distinguish fretboard-reading errors from interval-calculation errors.</div>`;
       return;
     }
     const byString=aggregateTable(rows,r=>r.stringIndex,k=>strings[Number(k)].name);
@@ -1705,6 +1798,7 @@ body.quiz-active { overscroll-behavior:none; }
       intervalAnswer:chosenLabel,
       intervalCorrect:preferred,
       intervalOk:ok,
+      semitones:current.semitones,
       equivalents,
       ok: itiAnswers.note1.ok && itiAnswers.note2.ok && ok,
       seconds:+(ms/1000).toFixed(2)
@@ -1767,7 +1861,9 @@ body.quiz-active { overscroll-behavior:none; }
     if (!roundOptions.tracked) {
       score.textContent = `${results.length}`;
       summary.textContent = results.length === 1 ? "practice question" : "practice questions";
-      roundDiagnostics.innerHTML = `<div class="muted">Practice mode — no timing, statistics, history, or learning state was recorded.</div>`;
+      roundDiagnostics.innerHTML = isInterval
+        ? `<div class="muted">Practice mode — no statistics, history, or learning state was recorded.</div>${itiRoundReviewTable(results)}`
+        : `<div class="muted">Practice mode — no timing, statistics, history, or learning state was recorded.</div>`;
       resultsBody.innerHTML = "";
       rawDetails.open = false;
       rawDetails.classList.add("hidden");
@@ -1801,8 +1897,10 @@ body.quiz-active { overscroll-behavior:none; }
 
     if (isInterval) {
       resultsBody.innerHTML = results.map(r => {
-        const low = `${strings[r.low.s].name}${r.low.fret}: ${answerLabel(r.low.answerPc, roundOptions.noteSet)}${r.low.ok ? "✓" : "✕"}`;
-        const high = `${strings[r.high.s].name}${r.high.fret}: ${answerLabel(r.high.answerPc, roundOptions.noteSet)}${r.high.ok ? "✓" : "✕"}`;
+        const lowCorrect = itiCorrectNoteLabel(r.low);
+        const highCorrect = itiCorrectNoteLabel(r.high);
+        const low = `${strings[r.low.s].name}${r.low.fret}: ${lowCorrect} · you ${answerLabel(r.low.answerPc, roundOptions.noteSet)}${r.low.ok ? "✓" : "✕"}`;
+        const high = `${strings[r.high.s].name}${r.high.fret}: ${highCorrect} · you ${answerLabel(r.high.answerPc, roundOptions.noteSet)}${r.high.ok ? "✓" : "✕"}`;
         return `<tr><td>${r.q}</td><td>${low}</td><td>${high}</td><td>${r.intervalAnswer}</td><td>${r.intervalCorrect}</td><td>${r.seconds.toFixed(2)} s ${r.intervalOk ? "✓" : "✕"}</td></tr>`;
       }).join("");
       exportBox.value = [
@@ -1813,7 +1911,7 @@ body.quiz-active { overscroll-behavior:none; }
         "",
         "| # | Low note | High note | Interval answer | Correct interval | Time (s) | Result |",
         "|---:|:---|:---|:---:|:---:|---:|:---:|",
-        ...results.map(r => `| ${r.q} | ${strings[r.low.s].name}${r.low.fret}: ${answerLabel(r.low.answerPc, roundOptions.noteSet)} ${r.low.ok ? "✓" : "✕"} | ${strings[r.high.s].name}${r.high.fret}: ${answerLabel(r.high.answerPc, roundOptions.noteSet)} ${r.high.ok ? "✓" : "✕"} | ${r.intervalAnswer} | ${r.intervalCorrect} | ${r.seconds.toFixed(2)} | ${r.intervalOk ? "✓" : "✕"} |`)
+        ...results.map(r => `| ${r.q} | ${strings[r.low.s].name}${r.low.fret}: ${itiCorrectNoteLabel(r.low)} (you: ${answerLabel(r.low.answerPc, roundOptions.noteSet)} ${r.low.ok ? "✓" : "✕"}) | ${strings[r.high.s].name}${r.high.fret}: ${itiCorrectNoteLabel(r.high)} (you: ${answerLabel(r.high.answerPc, roundOptions.noteSet)} ${r.high.ok ? "✓" : "✕"}) | ${r.intervalAnswer} | ${r.intervalCorrect} | ${r.seconds.toFixed(2)} | ${r.intervalOk ? "✓" : "✕"} |`)
       ].join("\n");
     } else if (isName) {
       resultsBody.innerHTML = results.map(r =>

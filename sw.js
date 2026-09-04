@@ -1,5 +1,5 @@
-const CACHE="fret-speed-v41-input-stats-pitch-guard";
-const ASSETS=["./index.html","./manifest.webmanifest","./icon.svg?v=41"];
+const CACHE="fret-speed-v42-iti-review-stats";
+const ASSETS=["./index.html","./manifest.webmanifest","./icon.svg?v=42"];
 
 self.addEventListener("install", event => {
   event.waitUntil(
